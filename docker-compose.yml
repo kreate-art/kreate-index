@@ -1,0 +1,62 @@
+version: "3"
+# TODO: Currently this file only includes a setup for Teiki Testnet (preview)
+services:
+  ogmios-with-node:
+    image: cardanosolutions/cardano-node-ogmios:v5.5.8_1.35.4-preview
+    platform: linux/amd64
+    volumes:
+      - node-db:/db
+      - node-ipc:/ipc
+    ports:
+      - "1337:1337" # Ogmios, both the WebSocket and the HTTP server
+      - "13000:3000" # cardano-node relay
+      - "12788:12788" # cardano-node EKG
+      - "12798:12798" # cardano-node Prometheus
+    restart: on-failure
+
+  ipfs:
+    image: ipfs/kubo:v0.18.0
+    volumes:
+      - ipfs-data:/data/ipfs
+    ports:
+      - "4001:4001"
+      - "4001:4001/udp"
+      - "5001:5001"
+      - "8080:8080"
+    restart: on-failure
+
+  postgres:
+    image: postgres:15.1-alpine3.17
+    environment:
+      POSTGRES_PASSWORD: teiki73114
+      POSTGRES_DB: teiki
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "15432:5432"
+    restart: on-failure
+
+  index:
+    image: teiki/index:latest
+    build:
+      context: .
+      args:
+        - COMMIT_SHA
+    depends_on:
+      - ogmios-with-node
+      - ipfs
+      - postgres
+    env_file:
+      - .env.testnet
+    environment:
+      DATABASE_URL: postgres://postgres:teiki73114@postgres:5432/teiki
+      OGMIOS_HOST: ogmios-with-node
+      OGMIOS_PORT: 1337
+      IPFS_SERVER_URL: http://ipfs:5001
+    restart: on-failure
+
+volumes:
+  node-db:
+  node-ipc:
+  postgres-data:
+  ipfs-data:
