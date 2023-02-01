@@ -20,10 +20,11 @@ export type ChainBacking = {
   backerAddress: Address;
   backingAmount: Lovelace;
   milestoneBacked: number;
-  backedAt: UnixTime;
   backingMessage: string | null;
-  unbackedAt: UnixTime | null;
   unbackingMessage: string | null;
+  // Smart Contract state
+  scBackedAt: UnixTime;
+  scUnbackedAt: UnixTime | null;
 };
 
 export type Event = { type: "backing"; indicies: NonEmpty<number[]> | null };
@@ -31,6 +32,7 @@ const $ = $handlers<TeikiChainIndexContext, Event>();
 
 export const setup = $.setup(async ({ sql }) => {
   // TODO: Rename staked_at => backed_at in contracts
+  // TODO: Rename unstaked_at => unbacked_at in contracts
   // TODO: Rename unstake => unback in contracts
   await sql`
     CREATE TABLE IF NOT EXISTS chain.backing (
@@ -39,10 +41,10 @@ export const setup = $.setup(async ({ sql }) => {
       backer_address text NOT NULL,
       backing_amount bigint NOT NULL,
       milestone_backed smallint NOT NULL,
-      backed_at timestamptz NOT NULL,
       backing_message text,
-      unbacked_at timestamptz,
-      unbacking_message text
+      unbacking_message text,
+      sc_backed_at timestamptz NOT NULL,
+      sc_unbacked_at timestamptz
     )
   `;
   await sql`
@@ -96,13 +98,13 @@ export const event = $.event(
     event: { indicies },
   }) => {
     const unbackingMessage = extractCip20Message(tx)?.join("\n") || null;
-    const unbackedAt = slotTimeInterpreter.slotToAbsoluteTime(
+    const scUnbackedAt = slotTimeInterpreter.slotToAbsoluteTime(
       tx.body.validityInterval.invalidBefore ?? slot
     );
     const unbackResult = await sql`
       UPDATE chain.backing b
-      SET unbacked_at = ${unbackedAt},
-          unbacking_message = ${unbackingMessage}
+      SET unbacking_message = ${unbackingMessage},
+          sc_unbacked_at = ${scUnbackedAt}
       FROM chain.output o
       WHERE
         o.id = b.id
@@ -133,8 +135,8 @@ export const event = $.event(
             ),
             backingAmount: output.value.lovelace,
             milestoneBacked: Number(backingDatum.milestoneBacked),
-            backedAt: Number(backingDatum.stakedAt.timestamp),
             backingMessage,
+            scBackedAt: Number(backingDatum.stakedAt.timestamp),
           },
         ];
       });
@@ -148,8 +150,8 @@ export const rollback = $.rollback(
   async ({ connections: { sql, views }, point }) => {
     await sql`
       UPDATE chain.backing b
-      SET unbacked_at = NULL,
-          unbacking_message = NULL
+      SET unbacking_message = NULL,
+          sc_unbacked_at = NULL
       FROM chain.output o
       WHERE
         o.id = b.id
