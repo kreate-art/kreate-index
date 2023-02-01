@@ -23,7 +23,7 @@ export type AiPodcastContext = {
   s3Bucket: string;
   s3Prefix: string;
 };
-type Task = { id: Cid; summary: string };
+type Task = { id: Cid; title: string; summary: string };
 
 const TASKS_PER_FETCH = 40;
 
@@ -71,13 +71,17 @@ export function aiPodcastIndexer(
       const tasks = await sql<Task[]>`
         SELECT
           cid AS id,
+          title,
           summary
         FROM (
           SELECT
-            pcu.cid,
+            DISTINCT pcu.cid,
+            pc.title,
             NULLIF (pcu.data -> 'data' ->> 'summary', '') AS summary
           FROM
             ipfs.project_community_update pcu
+          INNER JOIN chain.project_detail pd ON pcu.cid = pd.last_community_update_cid
+          INNER JOIN ipfs.project_content pc ON pc.cid = pd.information_cid
           LEFT JOIN ai.podcast pod ON pcu.cid = pod.cid
           WHERE
             pod.cid IS NULL) u
@@ -88,7 +92,7 @@ export function aiPodcastIndexer(
       return { tasks, continue: tasks.length >= TASKS_PER_FETCH };
     },
 
-    handle: async function ({ id, summary }: Task) {
+    handle: async function ({ id, title, summary }: Task) {
       const {
         connections: { sql, s3 },
         context: { aiServerUrl, s3Bucket, s3Prefix },
@@ -98,6 +102,11 @@ export function aiPodcastIndexer(
       const s3Key = `${s3Prefix}${id}.wav`;
       try {
         summary = normalizeSummary(summary);
+        title = title
+          .split(/\s+/)
+          .filter((w) => !!w)
+          .slice(0, 10)
+          .join(" ");
         assert(summary.length >= 100, `update summary is too short (< 100)`);
 
         // TODO: The TTS server is really fragile at the moment
@@ -120,7 +129,7 @@ export function aiPodcastIndexer(
             headers: {
               "Content-Type": "application/x-www-form-urlencoded",
             },
-            body: new URLSearchParams({ text: summary }),
+            body: new URLSearchParams({ text: [title, summary].join("\n") }),
           });
           if (!res.ok)
             throw new Error(
