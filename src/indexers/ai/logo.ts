@@ -43,7 +43,7 @@ export function aiLogoIndexer(
     name: "ai.logo",
     connections,
     triggers: {
-      channels: ["ai_logo"],
+      channels: ["ai.logo"],
       interval: 21_600_000, // 6 hours
     },
     concurrency: { workers: 16 },

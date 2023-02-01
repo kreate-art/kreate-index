@@ -55,12 +55,12 @@ ipfsProjectCommunityUpdateIndexer.setup = $setup(async ({ sql }) => {
 });
 
 export function ipfsProjectContentIndexer(
-  connections: VitalConnections & Connections<"ipfs" | "viewsRefresher">
+  connections: VitalConnections & Connections<"ipfs" | "views">
 ): PollingIndexer<IpfsProjectContext> {
   return createPollingIndexer({
     name: "ipfs.project_content",
     connections,
-    triggers: { channels: ["ipfs_project_content"] },
+    triggers: { channels: ["ipfs.project_content"] },
 
     fetch: async function () {
       const {
@@ -86,7 +86,7 @@ export function ipfsProjectContentIndexer(
 
     handle: async function ({ id }: Task) {
       const {
-        connections: { sql, ipfs, notifications, viewsRefresher },
+        connections: { sql, ipfs, notifications, views },
         context: { ignored },
       } = this;
       // TODO: Proper type
@@ -132,9 +132,9 @@ export function ipfsProjectContentIndexer(
             ON CONFLICT DO NOTHING
         `;
 
-      notifications.notify("discord_project_alert");
+      notifications.notify("discord.project_alert");
 
-      if (customUrl != null) viewsRefresher.refresh("views.project_custom_url");
+      if (customUrl != null) views.refresh("views.project_custom_url");
     },
   });
 }
@@ -145,7 +145,7 @@ export function ipfsProjectCommunityUpdateIndexer(
   return createPollingIndexer({
     name: "ipfs.project_community_update",
     connections,
-    triggers: { channels: ["ipfs_project_community_update"] },
+    triggers: { channels: ["ipfs.project_community_update"] },
 
     fetch: async function () {
       const {
@@ -190,7 +190,7 @@ export function ipfsProjectCommunityUpdateIndexer(
     },
 
     batch: function (_tasks: NonEmpty<Task[]>) {
-      this.connections.notifications.notify("ai_podcast");
+      this.connections.notifications.notify("ai.podcast");
     },
   });
 }

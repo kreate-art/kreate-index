@@ -74,9 +74,7 @@ export function chainIndexer({
 
 const $ = $handlers<TeikiChainIndexContext>();
 
-const chainRollback = $.rollback(
-  async ({ connections: { viewsRefresher } }) => {
-    viewsRefresher.refresh("views.project_custom_url");
-    viewsRefresher.refresh("views.project_summary");
-  }
-);
+const chainRollback = $.rollback(async ({ connections: { views } }) => {
+  views.refresh("views.project_custom_url");
+  views.refresh("views.project_summary");
+});

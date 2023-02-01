@@ -43,7 +43,7 @@ export function discordProjectAlertIndexer(
   return createPollingIndexer({
     name: "discord.project_alert",
     connections,
-    triggers: { channels: ["discord_project_alert"] },
+    triggers: { channels: ["discord.project_alert"] },
     concurrency: { workers: 1 },
 
     initialize: function () {

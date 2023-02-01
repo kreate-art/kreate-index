@@ -229,8 +229,8 @@ export const projectDetailEvent = $.event<"project_detail">(
       return;
     }
     await sql`INSERT INTO chain.project_detail ${sql(projectDetails)}`;
-    driver.notify("ipfs_project_content");
-    hasCommunityUpdate && driver.notify("ipfs_project_community_update");
+    driver.notify("ipfs.project_content");
+    hasCommunityUpdate && driver.notify("ipfs.project_community_update");
     driver.refresh("views.project_summary");
   }
 );

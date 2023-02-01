@@ -5,26 +5,26 @@ import { Sql } from ".";
 const DEFAULT_DEBOUNCE = 500; // 0.5s
 const DEFAULT_CONCURRENTLY = false;
 
-export interface ViewsRefresher {
+export interface ViewsController {
   refresh(view: string): void;
   refreshImmediately(view: string): Promise<void>;
   shutdown(): void;
 }
 
-export type ViewsRefresherOptionsEntry = {
+export type ViewsControllerOptionsEntry = {
   debounce?: number;
   concurrently?: boolean;
 };
 
-export type ViewsRefresherOptions = {
-  default?: ViewsRefresherOptionsEntry;
-  views?: Record<string, ViewsRefresherOptionsEntry>;
+export type ViewsControllerOptions = {
+  default?: ViewsControllerOptionsEntry;
+  views?: Record<string, ViewsControllerOptionsEntry>;
 };
 
-export function createViewsRefresher(
+export function createViewsController(
   sql: Sql,
-  options?: ViewsRefresherOptions
-): ViewsRefresher {
+  options?: ViewsControllerOptions
+): ViewsController {
   const defaultOption = options?.default;
   const defaultDebounce = defaultOption?.debounce ?? DEFAULT_DEBOUNCE;
   const defaultConcurrently =
@@ -37,21 +37,19 @@ export function createViewsRefresher(
 
   async function doRefreshNormally(view: string) {
     if (!isActive) {
-      console.warn(`<viewsRefresher> Inactive. Ignored Refresh: ${view}`);
+      console.warn(`<views> Inactive. Ignored Refresh: ${view}`);
       return;
     }
-    console.log(`<viewsRefresher> Refresh: ${view}`);
+    console.log(`<views> Refresh: ${view}`);
     await sql`REFRESH MATERIALIZED VIEW ${sql(view)}`;
   }
 
   async function doRefreshConcurrently(view: string) {
     if (!isActive) {
-      console.warn(
-        `<viewsRefresher> Inactive. Ignored Refresh Concurrently: ${view}`
-      );
+      console.warn(`<views> Inactive. Ignored Refresh Concurrently: ${view}`);
       return;
     }
-    console.log(`<viewsRefresher> Refresh Concurrently: ${view}`);
+    console.log(`<views> Refresh Concurrently: ${view}`);
     await sql`REFRESH MATERIALIZED VIEW CONCURRENTLY ${sql(view)}`;
   }
 

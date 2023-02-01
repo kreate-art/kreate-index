@@ -145,7 +145,7 @@ export const event = $.event(
 );
 
 export const rollback = $.rollback(
-  async ({ connections: { sql, viewsRefresher }, point }) => {
+  async ({ connections: { sql, views }, point }) => {
     await sql`
       UPDATE chain.backing b
       SET unbacked_at = NULL,
@@ -155,7 +155,7 @@ export const rollback = $.rollback(
         o.id = b.id
         AND o.spent_slot > ${slotFrom(point)}
     `;
-    viewsRefresher.refresh("views.project_summary");
+    views.refresh("views.project_summary");
   }
 );
 
