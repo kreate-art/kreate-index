@@ -93,7 +93,7 @@ export const setupGenesis = $setup(async ({ sql }) => {
 });
 
 type BaseChainIndexConnections = Connections<
-  "sql" | "lucid" | "notifications" | "viewsRefresher"
+  "sql" | "lucid" | "notifications" | "views"
 >;
 export type ChainIndexConnections = BaseChainIndexConnections & {
   synchronized: fastq.queueAsPromised<() => unknown, unknown>;
@@ -286,9 +286,10 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
         const { tip } = await ChainSync.findIntersect(interactionContext, [
           "origin",
         ]);
-        if (typeof startAt === "number" && slotFrom(tip) >= startAt)
-          return await chainSync.start(points, inFlight, onError);
-        else {
+        if (typeof startAt === "number" && slotFrom(tip) >= startAt) {
+          await this.reloadSlotTimeInterpreter();
+          return chainSync.start(points, inFlight, onError);
+        } else {
           const tipStr =
             tip === "origin"
               ? tip
@@ -301,10 +302,6 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
       }
     })();
 
-    console.log(await this.clients.stateQuery.ledgerTip());
-
-    await this.reloadSlotTimeInterpreter();
-
     console.log("!!! Started");
     this.status = "active";
 
@@ -316,7 +313,7 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
       console.log(`[Chain] Intersection >= ${endAt}`);
       console.log(`[Chain] Goodbye in ${(this.endDelay / 1000).toFixed(1)}s`);
       endTimeout = setTimeout(prexit.exit0, this.endDelay);
-    } else {
+    } else if (endAt) {
       console.log(`[Chain] Will stop at: ${endAt}`);
     }
     return csr;
@@ -472,7 +469,7 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
           notifications.clear();
         }
         if (refreshes.size) {
-          const refresh = connections.viewsRefresher.refresh;
+          const refresh = connections.views.refresh;
           for (const v of refreshes) refresh(v);
           refreshes.clear();
         }
@@ -531,6 +528,7 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
       `// Slot time interpreter stale after ${interpreter.staleSlot}.`
     );
     this.connections.slotTimeInterpreter = interpreter;
+    console.log("Reloaded", this.connections.slotTimeInterpreter);
     return interpreter;
   }
 

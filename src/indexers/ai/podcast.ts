@@ -58,7 +58,7 @@ export function aiPodcastIndexer(
     name: "ai.podcast",
     connections,
     triggers: {
-      channels: ["ai_podcast"],
+      channels: ["ai.podcast"],
       interval: CURRENT_CONFIG.interval,
     },
     concurrency: {

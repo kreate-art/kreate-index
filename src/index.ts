@@ -52,7 +52,7 @@ const teikiChainIndexer: Indexer = {
         "sql",
         "lucid",
         "notifications",
-        "viewsRefresher"
+        "views"
       ),
     });
 
@@ -113,7 +113,7 @@ const AllIndexers = {
   chain: teikiChainIndexer,
   "ipfs.project_content": wrapPollingIndexer(
     ipfsProjectContentIndexer,
-    ["sql", "ipfs", "notifications", "viewsRefresher"],
+    ["sql", "ipfs", "notifications", "views"],
     () => ({ ignored: [] })
   ),
   "ipfs.project_community_update": wrapPollingIndexer(
@@ -197,10 +197,10 @@ for (const [index, name] of sorted) {
 
 const notifications = await connections.provideOne("notifications");
 notifications.listen(
-  "teiki/index:reload",
+  "index:reload",
   // Just shutdown for now...
   () => prexit.exit(174),
-  () => console.log("Listening on teiki/index:reload for signals...")
+  () => console.log("Listening on index:reload for signals...")
 );
 
 if (willSetup) {

@@ -9,7 +9,7 @@ import { assert } from "@teiki/protocol/utils";
 import * as config from "./config";
 import * as db from "./db";
 import { createNotificationsService, Notifications } from "./db/notifications";
-import { createViewsRefresher, ViewsRefresher } from "./db/views-refresher";
+import { createViewsController, ViewsController } from "./db/views";
 import { MaybePromise } from "./types/typelevel";
 
 export type AllConnections = {
@@ -19,7 +19,7 @@ export type AllConnections = {
   readonly discord: discord.Client<boolean>;
   readonly s3: S3Client;
   readonly notifications: Notifications;
-  readonly viewsRefresher: ViewsRefresher;
+  readonly views: ViewsController;
 };
 
 export type ConnectionKey = keyof AllConnections;
@@ -148,9 +148,9 @@ register("notifications", {
   disconnect: (self) => self.shutdown(),
 });
 
-register("viewsRefresher", {
+register("views", {
   connect: async () =>
-    createViewsRefresher(await provideOne("sql"), {
+    createViewsController(await provideOne("sql"), {
       views: {
         "views.project_custom_url": { concurrently: true },
         "views.project_summary": { concurrently: true, debounce: 1_000 },
