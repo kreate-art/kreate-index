@@ -1,7 +1,12 @@
+import { scheduler } from "timers/promises";
+
 import {
+  ChainSync,
   ConnectionConfig as OgmiosConnectionConfig,
   createInteractionContext,
+  InteractionContext,
   isBabbageBlock,
+  ServerNotReady,
   StateQuery,
 } from "@cardano-ogmios/client";
 import * as O from "@cardano-ogmios/schema";
@@ -152,6 +157,7 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
 
   // `clients` will be set by ChainIndexer.new. It's fine since the constructor is private.
   private readonly clients!: {
+    readonly interactionContext: InteractionContext;
     readonly chainSync: ChainSyncClient;
     readonly stateQuery: StateQuery.StateQueryClient;
   };
@@ -191,14 +197,28 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
       { ...connections, synchronized, slotTimeInterpreter },
       handlers
     );
-    const interactionContext = await createInteractionContext(
-      self.onClientError.bind(self),
-      self.onClientClose.bind(self),
-      { connection: ogmios.connection, interactionType: "LongRunning" }
-    );
+    const interactionContext = await (async () => {
+      for (;;) {
+        try {
+          return await createInteractionContext(
+            self.onClientError.bind(self),
+            self.onClientClose.bind(self),
+            { connection: ogmios.connection, interactionType: "LongRunning" }
+          );
+        } catch (e) {
+          if (e instanceof ServerNotReady) {
+            console.warn(`[Chain] Wait until Ogmios is ready :: ${e.message}`);
+            await scheduler.wait(5_000);
+          } else {
+            throw e;
+          }
+        }
+      }
+    })();
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore: This is the only time `clients` is set.
     self.clients = {
+      interactionContext,
       chainSync: createChainSyncClient(
         interactionContext,
         self.rollForward.bind(self),
@@ -216,7 +236,7 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
     reset = false,
     inFlight,
     // For finding intersection on start
-    checkpointHistory = 50,
+    checkpointHistory = 20,
     onError,
   }: {
     context: TContext;
@@ -257,8 +277,34 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
       points = blocks.length ? blocks : begin;
     }
 
+    const startAt = points instanceof Array ? slotFrom(points[0]) : points;
+    console.log(`[Chain] Will start at: ${startAt}`);
+
+    const csr = await (async () => {
+      const { interactionContext, chainSync } = this.clients;
+      for (;;) {
+        const { tip } = await ChainSync.findIntersect(interactionContext, [
+          "origin",
+        ]);
+        if (typeof startAt === "number" && slotFrom(tip) >= startAt)
+          return await chainSync.start(points, inFlight, onError);
+        else {
+          const tipStr =
+            tip === "origin"
+              ? tip
+              : `${tip.slot} | ${tip.hash} ~ ${tip.blockNo}`;
+          console.warn(
+            `[Chain] Wait until chain is sufficiently synced :: ${tipStr}`
+          );
+          await scheduler.wait(10_000);
+        }
+      }
+    })();
+
+    console.log(await this.clients.stateQuery.ledgerTip());
+
     await this.reloadSlotTimeInterpreter();
-    const csr = await this.clients.chainSync.start(points, inFlight, onError);
+
     console.log("!!! Started");
     this.status = "active";
 
@@ -285,9 +331,8 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
       console.warn(
         "[Chain] Not fully started yet. Try stopping again later..."
       );
-      await new Promise((resolve, reject) =>
-        setTimeout(() => this.stop(immediate).then(resolve).catch(reject), 1000)
-      );
+      await scheduler.wait(1_000);
+      await this.stop(immediate);
     } else {
       this.status = "stopping";
       console.log("... Stopping");
@@ -474,12 +519,12 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
   }
 
   private async reloadSlotTimeInterpreter(): Promise<SlotTimeInterpreter> {
-    const client = this.clients.stateQuery;
+    const stateQuery = this.clients.stateQuery;
     const interpreter = createSlotTimeInterpreter(
       ...(await Promise.all([
-        client.ledgerTip(),
-        client.eraSummaries(),
-        client.systemStart().then((d) => +d),
+        stateQuery.ledgerTip(),
+        stateQuery.eraSummaries(),
+        stateQuery.systemStart().then((d) => +d),
       ]))
     );
     console.log(
