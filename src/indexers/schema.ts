@@ -201,7 +201,7 @@ async function setupProjectSummaryView(sql: Sql) {
       GROUP BY
         pd.project_id) upd
       INNER JOIN chain.block b1 ON b1.slot = upd.created_slot
-        LEFT JOIN chain.block b2 ON b2.slot = upd.last_community_update_slot
+      LEFT JOIN chain.block b2 ON b2.slot = upd.last_community_update_slot
     ),
     x_b AS (
       SELECT
