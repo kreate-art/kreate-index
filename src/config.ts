@@ -90,6 +90,7 @@ export function ai() {
   return {
     AI_SERVER_URL: requiredEnv("AI_SERVER_URL"),
     AI_S3_BUCKET: requiredEnv("AI_S3_BUCKET"),
+    IPFS_GATEWAY_URL: requiredEnv("IPFS_GATEWAY_URL"),
   };
 }
 

@@ -41,6 +41,14 @@ ipfsProjectContentIndexer.setup = $setup(async ({ sql }) => {
       cid TEXT PRIMARY KEY
     )
   `;
+
+  await sql`
+      CREATE TABLE IF NOT EXISTS ipfs.project_media (
+        project_cid TEXT,
+        media_cid TEXT,
+        PRIMARY KEY (project_cid, media_cid)
+      )
+  `;
 });
 
 ipfsProjectCommunityUpdateIndexer.setup = $setup(async ({ sql }) => {
@@ -112,6 +120,20 @@ export function ipfsProjectContentIndexer(
         tags: nullIfFalsy(projectContent?.data?.basics?.tags),
         summary: nullIfFalsy(projectContent?.data?.basics?.summary),
       };
+
+      if (projectContent.bufs != null) {
+        await Promise.all(
+          Object.values(projectContent.bufs).map(async (mediaCid) => {
+            await sql`
+              INSERT INTO ipfs.project_media ${sql({
+                projectCid: id,
+                mediaCid,
+              })}
+                ON CONFLICT DO NOTHING
+            `;
+          })
+        );
+      }
 
       await sql`
         INSERT INTO ipfs.project_content ${sql(record)}

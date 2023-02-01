@@ -5,6 +5,7 @@ import * as connections from "./connections";
 import { Indexer, Setup } from "./framework/base";
 import { PollingIndexer } from "./framework/polling";
 import { aiLogoIndexer } from "./indexers/ai/logo";
+import { aiOcrIndexer } from "./indexers/ai/ocr";
 import { aiPodcastIndexer } from "./indexers/ai/podcast";
 import { getChainIndexer } from "./indexers/chain";
 import { discordProjectAlertIndexer } from "./indexers/discord-bot";
@@ -147,6 +148,13 @@ const AllIndexers = {
       };
     }
   ),
+  "ai.ocr": wrapPollingIndexer(aiOcrIndexer, ["sql", "notifications"], () => {
+    const cc = config.ai();
+    return {
+      aiServerUrl: cc.AI_SERVER_URL,
+      ipfsGatewayUrl: cc.IPFS_GATEWAY_URL,
+    };
+  }),
   "discord.project_alert": wrapPollingIndexer(
     discordProjectAlertIndexer,
     ["sql", "discord", "notifications"],
@@ -162,7 +170,7 @@ const AllIndexers = {
 } as const;
 
 const DisabledIndexers: Partial<Record<config.Env, string[]>> = {
-  development: ["ai.logo", "ai.podcast", "discord.project_alert"],
+  development: ["ai.logo", "ai.podcast", "ai.ocr", "discord.project_alert"],
   staging: ["ai.logo", "ai.podcast", "discord.project_alert"],
 };
 const disabled = DisabledIndexers[config.ENV] ?? [];
