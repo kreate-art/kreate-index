@@ -72,9 +72,17 @@ export const setupGenesis = $setup(async ({ sql }) => {
     )
   `;
   await sql`
-    CREATE INDEX IF NOT EXISTS output_tag
-      ON chain.output(tag)
+    CREATE INDEX IF NOT EXISTS output_created_slot
+      ON chain.output(created_slot)
   `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS output_spent_slot
+      ON chain.output(spent_slot)
+  `;
+  // await sql`
+  //   CREATE INDEX IF NOT EXISTS output_tag
+  //     ON chain.output(tag)
+  // `;
   await sql`
     CREATE TABLE IF NOT EXISTS chain.script (
       script_hash varchar(56) PRIMARY KEY,
