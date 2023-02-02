@@ -236,7 +236,12 @@ export const projectDetailEvent = $.event<"project_detail">(
 );
 
 export const projectScriptEvent = $.event<"project_script">(
-  async ({ driver, connections: { sql }, event: { indicies } }) => {
+  async ({
+    driver,
+    context: { staking },
+    connections: { sql },
+    event: { indicies },
+  }) => {
     const projectScripts = await driver.storeWithScript(indicies, (output) => {
       if (output.scriptHash == null) {
         console.warn(
@@ -270,6 +275,8 @@ export const projectScriptEvent = $.event<"project_script">(
       console.warn("there is no valid project script");
       return;
     }
+    for (const script of projectScripts)
+      staking.register(script.stakingScriptHash, "Script");
     await sql`INSERT INTO chain.project_script ${sql(projectScripts)}`;
   }
 );

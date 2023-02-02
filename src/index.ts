@@ -6,7 +6,7 @@ import { Indexer, Setup } from "./framework/base";
 import { PollingIndexer } from "./framework/polling";
 import { aiLogoIndexer } from "./indexers/ai/logo";
 import { aiPodcastIndexer } from "./indexers/ai/podcast";
-import { chainIndexer } from "./indexers/chain";
+import { getChainIndexer } from "./indexers/chain";
 import { discordProjectAlertIndexer } from "./indexers/discord-bot";
 import {
   ipfsProjectCommunityUpdateIndexer,
@@ -24,12 +24,12 @@ import { MaybePromise } from "./types/typelevel";
 // Cleanups
 const shutdowns: (() => MaybePromise<void>)[] = [];
 
-prexit(async (signal, code, error) => {
+prexit(async (signal, error, idk) => {
   console.warn(`$ TIME: ${((Date.now() - RUN_AT) / 1000).toFixed(2)}`);
-  console.warn("$ EXIT:", signal, code, error);
+  console.warn("$ EXIT:", signal, error, idk);
   for (const shutdown of [...shutdowns].reverse()) await shutdown();
   await connections.cleanup();
-  if (process.exitCode == null && !(code == null && error == null))
+  if (process.exitCode == null && error != null)
     process.exitCode = os.constants.signals[signal as NodeJS.Signals] ?? 1;
   if (signal === "uncaughtException") {
     // TODO: Sentry here?
@@ -43,10 +43,11 @@ prexit(async (signal, code, error) => {
 
 // Indexers
 const teikiChainIndexer: Indexer = {
-  setup: chainIndexer.setup,
+  // TODO: Fix those abstraction leak later...
+  setup: getChainIndexer.setup,
   run: async () => {
     const cc = config.chainIndex();
-    const indexer = await chainIndexer(
+    const indexer = await getChainIndexer(
       await connections.provide(
         "sql",
         "ogmios",
@@ -55,21 +56,22 @@ const teikiChainIndexer: Indexer = {
         "views"
       )
     );
-
+    await indexer.staking.start();
     const { intersection } = await indexer.start({
       context: {
         config: config.pick(
           cc,
-          "TEIKI_PLANT_NFT_MPH",
           "ALWAYS_FAIL_SCRIPT_HASH",
-          "PROJECT_AT_MPH",
           "PROTOCOL_NFT_MPH",
           "PROTOCOL_SCRIPT_V_SCRIPT_HASH",
-          "PROOF_OF_BACKING_MPH"
+          "PROJECT_AT_MPH",
+          "PROOF_OF_BACKING_MPH",
+          "TEIKI_PLANT_NFT_MPH"
         ),
         dedicatedTreasuryVScriptHashes: new Set(),
         sharedTreasuryVScriptHashes: new Set(),
         openTreasuryVScriptHashes: new Set(),
+        staking: indexer.staking,
       },
       begin:
         typeof cc.CHAIN_INDEX_BEGIN === "string"
@@ -84,7 +86,11 @@ const teikiChainIndexer: Indexer = {
             },
     });
     console.log("<> Chain intersection found:", intersection);
-    return () => indexer.stop(true);
+    await indexer.onceReady();
+    return async () => {
+      await indexer.stop(true);
+      await indexer.staking.stop();
+    };
   },
 };
 

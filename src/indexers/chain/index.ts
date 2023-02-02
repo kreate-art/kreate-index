@@ -1,5 +1,11 @@
 import { $setup, Setup } from "../../framework/base";
-import { $handlers, ChainIndexer, setupGenesis } from "../../framework/chain";
+import {
+  $handlers,
+  BaseChainIndexConnections,
+  ChainIndexer,
+  setupGenesis,
+} from "../../framework/chain";
+import { StakingHash } from "../../types/staking";
 
 import * as backing from "./backing";
 import { TeikiChainIndexContext } from "./context";
@@ -7,6 +13,7 @@ import * as deployed_scripts from "./deployed-scripts";
 import * as migration from "./migration";
 import * as project from "./project";
 import * as protocol_params from "./protocol-params";
+import * as staking from "./staking";
 import * as teiki_plant from "./teiki-plant";
 import * as treasury from "./treasury";
 
@@ -14,6 +21,7 @@ type TeikiChainIndexEvent =
   | project.Event
   | backing.Event
   | treasury.Event
+  | staking.Event
   | protocol_params.Event
   | deployed_scripts.Event
   | migration.Event
@@ -21,7 +29,7 @@ type TeikiChainIndexEvent =
 
 const creator = ChainIndexer.new<TeikiChainIndexContext, TeikiChainIndexEvent>;
 
-chainIndexer.setup = $setup(async (resources) => {
+getChainIndexer.setup = $setup(async (resources) => {
   await setupGenesis(resources);
   await Promise.all(setups.map((setup) => setup(resources)));
 });
@@ -30,14 +38,21 @@ const setups: Setup[] = [
   project.setup,
   backing.setup,
   treasury.setup,
+  staking.setup,
   protocol_params.setup,
   teiki_plant.setup,
 ];
 
-export function chainIndexer(
-  connections: Parameters<typeof creator>[0]["connections"]
-) {
-  return creator({
+const $ = $handlers<TeikiChainIndexContext>();
+
+export async function getChainIndexer(connections: BaseChainIndexConnections) {
+  const stakingIndexer = staking.createIndexer({
+    connections,
+    onReloaded: ({ connections: { views } }) => {
+      views.refresh("views.project_summary");
+    },
+  });
+  const chainIndexer = await creator({
     connections,
     handlers: {
       initializers: [treasury.initialize],
@@ -45,6 +60,7 @@ export function chainIndexer(
         project.filter,
         backing.filter,
         treasury.filter,
+        staking.filter,
         protocol_params.filter,
         deployed_scripts.filter,
         migration.filter,
@@ -59,19 +75,39 @@ export function chainIndexer(
         dedicated_treasury: [treasury.dedicatedTreasuryEvent],
         shared_treasury: [treasury.sharedTreasuryEvent],
         open_treasury: [treasury.openTreasuryEvent],
+        staking$reload: [staking.reloadEvent],
         protocol_params: [protocol_params.event],
         deployed_scripts: [deployed_scripts.event],
         migration: [],
         teiki_plant: [teiki_plant.event],
       },
-      rollbacks: [backing.rollback, chainRollback],
+      rollbacks: [
+        backing.rollback,
+        $.rollback(async ({ connections: { views } }) => {
+          stakingIndexer.reload(null);
+          views.refresh("views.project_custom_url");
+          views.refresh("views.project_summary");
+        }),
+      ],
+      onceInSync: [async () => stakingIndexer.toggleReloadDynamically(true)],
+    },
+  });
+  return Object.assign(chainIndexer, {
+    staking: stakingIndexer,
+    onceReady: async function () {
+      const rows = await connections.sql<{ hash: StakingHash }[]>`
+        SELECT DISTINCT
+          datum_json -> 'registry' -> 'protocolStakingValidator' -> 'script' ->> 'hash' AS hash
+        FROM
+          chain.protocol_params pp
+        UNION ALL
+        SELECT DISTINCT
+          staking_script_hash AS hash
+        FROM
+          chain.project_script ps
+      `;
+      const hashes = rows.map(({ hash }) => hash);
+      stakingIndexer.batchRegister(hashes, "Script");
     },
   });
 }
-
-const $ = $handlers<TeikiChainIndexContext>();
-
-const chainRollback = $.rollback(async ({ connections: { views } }) => {
-  views.refresh("views.project_custom_url");
-  views.refresh("views.project_summary");
-});

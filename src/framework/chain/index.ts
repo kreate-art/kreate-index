@@ -1,4 +1,4 @@
-import { scheduler } from "timers/promises";
+import { scheduler } from "node:timers/promises";
 
 import { ChainSync, isBabbageBlock, StateQuery } from "@cardano-ogmios/client";
 import * as O from "@cardano-ogmios/schema";
@@ -84,7 +84,7 @@ export const setupGenesis = $setup(async ({ sql }) => {
   `;
 });
 
-type BaseChainIndexConnections = Connections<
+export type BaseChainIndexConnections = Connections<
   "sql" | "ogmios" | "lucid" | "notifications" | "views"
 >;
 export type ChainIndexConnections = BaseChainIndexConnections & {
@@ -106,6 +106,7 @@ type ChainIndexFilter<TContext, TEvent> = (_: {
   context: TContext;
   block: ChainBlock;
   tx: O.TxBabbage;
+  inSync: boolean;
 }) => MaybePromise<TEvent[] | null>;
 
 type ChainIndexEventHandler<TContext, TEvent> = (_: {
@@ -115,6 +116,7 @@ type ChainIndexEventHandler<TContext, TEvent> = (_: {
   block: ChainBlock;
   tx: O.TxBabbage;
   event: TEvent;
+  inSync: boolean;
 }) => MaybePromise<void>;
 
 type ChainIndexRollbackHandler<TContext> = (_: {
@@ -139,6 +141,8 @@ type ChainIndexHandlers<TContext, TEvent extends IEvent> = {
   };
   // Rollback Handlers are ran sequentially
   readonly rollbacks: ChainIndexRollbackHandler<TContext>[];
+  // Called once
+  readonly onceInSync?: ((tip: O.Tip) => MaybePromise<void>)[];
 };
 
 type ChainIndexerStatus = "inactive" | "starting" | "active" | "stopping";
@@ -186,15 +190,17 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
       { ...connections, synchronized, slotTimeInterpreter },
       handlers
     );
+    const ogmiosContext = await connections.ogmios.create("chain");
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore: This is the only time `clients` is set.
     self.clients = {
+      ogmiosContext,
       chainSync: createChainSyncClient(
-        connections.ogmios,
+        ogmiosContext,
         self.rollForward.bind(self),
         self.rollBackward.bind(self)
       ),
-      stateQuery: await StateQuery.createStateQueryClient(connections.ogmios),
+      stateQuery: await StateQuery.createStateQueryClient(ogmiosContext),
     };
     return self;
   }
@@ -251,13 +257,14 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
     console.log(`[Chain] Will start at: ${startAt}`);
 
     const csr = await (async () => {
-      const ogmios = this.connections.ogmios;
       const chainSync = this.clients.chainSync;
       for (;;) {
-        const { tip } = await ChainSync.findIntersect(ogmios, ["origin"]);
+        const { tip } = await ChainSync.findIntersect(chainSync.context, [
+          "origin",
+        ]);
         if (typeof startAt === "number" && slotFrom(tip) >= startAt) {
           await this.reloadSlotTimeInterpreter();
-          return chainSync.start(points, inFlight, onError);
+          return chainSync.startSync(points, inFlight, onError);
         } else {
           const tipStr =
             tip === "origin"
@@ -302,7 +309,7 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
     } else {
       this.status = "stopping";
       console.log("... Stopping");
-      await this.clients.chainSync.stop(immediate);
+      await this.clients.chainSync.shutdown(immediate);
       const { blockIngestor, connections, context } = this;
       const lastBlock = blockIngestor.lastBlock;
       if (lastBlock) {
@@ -368,6 +375,7 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
       this.inSync = true;
       blockIngestor.inSync = true;
       console.log(`!! NOW IN SYNC !!`);
+      for (const once of this.handlers.onceInSync ?? []) await once(tip);
     }
 
     const shouldStore = blockIngestor.rollForward(cblock);
@@ -381,6 +389,7 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
           block: cblock,
           connections,
           context,
+          inSync,
         };
         const foundEvents: TEvent[] = [];
         const filterResults = await Promise.all(filters.map((f) => f(params)));

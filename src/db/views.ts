@@ -77,6 +77,7 @@ export function createViewsController(
     },
     shutdown: function () {
       isActive = false;
+      for (const deb of Object.values(refreshes)) deb.cancel();
     },
   };
 }
