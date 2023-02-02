@@ -1,11 +1,4 @@
-import { scheduler } from "timers/promises";
-
 import { S3Client } from "@aws-sdk/client-s3";
-import {
-  createInteractionContext,
-  InteractionContext,
-  ServerNotReady,
-} from "@cardano-ogmios/client";
 import * as discord from "discord.js";
 import { GatewayIntentBits } from "discord.js";
 import * as IpfsClient from "ipfs-http-client";
@@ -17,11 +10,12 @@ import * as config from "./config";
 import * as db from "./db";
 import { createNotificationsService, Notifications } from "./db/notifications";
 import { createViewsController, ViewsController } from "./db/views";
+import { createOgmiosContextFactory, OgmiosContextFactory } from "./ogmios";
 import { MaybePromise } from "./types/typelevel";
 
 export type AllConnections = {
   readonly sql: db.Sql;
-  readonly ogmios: InteractionContext;
+  readonly ogmios: OgmiosContextFactory;
   readonly ipfs: IpfsClient.IPFSHTTPClient;
   readonly lucid: Lucid;
   readonly discord: discord.Client<boolean>;
@@ -47,8 +41,6 @@ type Registration<K extends ConnectionKey> = {
 const registry: { [K in ConnectionKey]?: Registration<K> } = {};
 
 const cleanups: [ConnectionKey, () => MaybePromise<void>][] = [];
-
-let disconnecting: ConnectionKey | undefined = undefined;
 
 export function register<K extends ConnectionKey>(
   key: K,
@@ -90,9 +82,7 @@ export async function provideOne<K extends ConnectionKey>(
           key,
           async () => {
             console.log(`<${key}> Disconnecting...`);
-            disconnecting = key;
             await disconnect(connection);
-            disconnecting = undefined;
             console.log(`<${key}> Disconnected!`);
           },
         ]);
@@ -126,58 +116,12 @@ register("sql", {
       db.options({ max: cc.DATABASE_MAX_CONNECTIONS })
     );
   },
-  disconnect: async (self) => self.end({ timeout: 10 }),
+  disconnect: (self) => self.end({ timeout: 10 }),
 });
 
 register("ogmios", {
-  connect: async () => {
-    function onClientError(error: Error) {
-      console.error("<ogmios> Error:", error);
-      throw error;
-    }
-
-    function onClientClose(code: number, reason: string) {
-      const message = `<ogmios> Close (${code}) ${reason}`;
-      if (disconnecting === "ogmios") console.warn(message);
-      else throw new Error(message);
-    }
-
-    const cc = config.ogmios();
-    for (;;) {
-      try {
-        return await createInteractionContext(onClientError, onClientClose, {
-          connection: cc,
-          interactionType: "LongRunning",
-        });
-      } catch (e) {
-        if (e instanceof ServerNotReady) {
-          console.warn(`<ogmios> Wait until Ogmios is ready :: ${e.message}`);
-          await scheduler.wait(5_000);
-        } else throw e;
-      }
-    }
-  },
-  disconnect: ({ socket }) => {
-    return new Promise((resolve, reject) => {
-      switch (socket.readyState) {
-        case socket.CONNECTING:
-          console.warn("<ogmios> just connecting...");
-          socket.once("close", () => resolve());
-          socket.once("error", (e) => reject(e));
-          return socket.close();
-        case socket.OPEN:
-          socket.once("close", () => resolve());
-          socket.once("error", (e) => reject(e));
-          return socket.close();
-        case socket.CLOSING:
-          console.warn("<ogmios> already closing...");
-          return resolve();
-        case socket.CLOSED:
-          console.warn("<ogmios> already closed...");
-          return resolve();
-      }
-    });
-  },
+  connect: () => createOgmiosContextFactory(config.ogmios()),
+  disconnect: (self) => self.shutdown(),
 });
 
 register("ipfs", {

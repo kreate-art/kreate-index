@@ -164,6 +164,7 @@ export function createPollingIndexer<
 
     finalize = async () => {
       console.log(`[${name}] Stopping...`);
+      scheduled && clearTimeout(scheduled);
       pollingQueue.killAndDrain();
       taskQueue?.killAndDrain();
       await Promise.all(unlistens.map((un) => un()));
@@ -248,7 +249,6 @@ export function createPollingIndexer<
         }
       }
     }
-
     pollingQueue.push("kick-off");
   }
 

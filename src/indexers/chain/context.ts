@@ -4,6 +4,8 @@ import { ScriptHash } from "lucid-cardano";
 
 import { Hex } from "@teiki/protocol/types";
 
+import { StakingController } from "../../types/staking";
+
 export interface TeikiChainIndexConfig {
   readonly TEIKI_PLANT_NFT_MPH: Hex;
   readonly ALWAYS_FAIL_SCRIPT_HASH: Hex;
@@ -20,4 +22,5 @@ export interface TeikiChainIndexContext {
   dedicatedTreasuryVScriptHashes: Set<ScriptHash>;
   sharedTreasuryVScriptHashes: Set<ScriptHash>;
   openTreasuryVScriptHashes: Set<ScriptHash>;
+  staking: StakingController;
 }

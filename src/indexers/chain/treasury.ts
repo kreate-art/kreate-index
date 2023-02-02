@@ -1,5 +1,4 @@
 import { getAddressDetailsSafe } from "@teiki/protocol/helpers/lucid";
-import { fromJson } from "@teiki/protocol/json";
 import * as S from "@teiki/protocol/schema";
 import {
   ProtocolParamsDatum,
@@ -59,25 +58,22 @@ export const initialize = $.initialize(
       openTreasuryVScriptHashes,
     },
   }) => {
-    const results = await sql`
-      SELECT
-        datum_json
-      FROM
-        chain.protocol_params
+    const results = await sql<
+      { datumJson: ProtocolParamsDatum | LegacyProtocolParamsDatum }[]
+    >`
+      SELECT datum_json FROM chain.protocol_params
     `;
 
-    for (const { datumJson } of results) {
-      const datum = fromJson<ProtocolParamsDatum | LegacyProtocolParamsDatum>(
-        datumJson
-      );
+    for (const row of results) {
+      const registry = row.datumJson.registry;
       dedicatedTreasuryVScriptHashes.add(
-        datum.registry.dedicatedTreasuryValidator.latest.script.hash
+        registry.dedicatedTreasuryValidator.latest.script.hash
       );
       sharedTreasuryVScriptHashes.add(
-        datum.registry.sharedTreasuryValidator.latest.script.hash
+        registry.sharedTreasuryValidator.latest.script.hash
       );
       openTreasuryVScriptHashes.add(
-        datum.registry.openTreasuryValidator.latest.script.hash
+        registry.openTreasuryValidator.latest.script.hash
       );
     }
   }

@@ -1,5 +1,4 @@
 import { parseProtocolParams } from "@teiki/protocol/helpers/schema";
-import { toJson } from "@teiki/protocol/json";
 import * as S from "@teiki/protocol/schema";
 import { assert } from "@teiki/protocol/utils";
 
@@ -47,6 +46,7 @@ export const event = $.event(
       dedicatedTreasuryVScriptHashes,
       sharedTreasuryVScriptHashes,
       openTreasuryVScriptHashes,
+      staking,
     },
   }) => {
     const protocolParams = await driver.store([index], (output) => {
@@ -76,9 +76,9 @@ export const event = $.event(
       openTreasuryVScriptHashes.add(
         registry.openTreasuryValidator.latest.script.hash
       );
+      staking.register(registry.protocolStakingValidator.script.hash, "Script");
 
-      const protocolParamsJson = toJson(protocolParams);
-      return ["protocol-params", { datumJson: protocolParamsJson }];
+      return ["protocol-params", { datumJson: protocolParams }];
     });
     await sql`INSERT INTO chain.protocol_params ${sql(protocolParams)}`;
   }

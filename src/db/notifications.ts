@@ -79,6 +79,7 @@ export function createNotificationsService(
     },
     shutdown: async function () {
       isActive = false;
+      for (const deb of Object.values(notifies)) deb.cancel();
       await Promise.all(Array.from(unlistens).map((un) => un()));
       unlistens.clear();
     },

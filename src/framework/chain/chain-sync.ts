@@ -1,7 +1,6 @@
 import {
   ChainSync,
   createPointFromCurrentTip,
-  InteractionContext,
   safeJSON,
   WebSocketClosed,
 } from "@cardano-ogmios/client";
@@ -10,6 +9,7 @@ import fastq from "fastq";
 
 import JsonBig from "@teiki/protocol/json";
 
+import { OgmiosContext } from "../../ogmios";
 import { ErrorHandler, queueCatch } from "../base";
 
 type RequestNextResponse = O.Ogmios["RequestNextResponse"];
@@ -19,20 +19,20 @@ export type ChainSyncReturn = {
   intersection: ChainSync.Intersection;
 };
 export interface ChainSyncClient {
-  context: InteractionContext;
-  start: (
+  context: OgmiosContext;
+  startSync: (
     points: "origin" | "tip" | O.Point[],
     inFlight?: number,
     onError?: ErrorHandler
   ) => Promise<ChainSyncReturn>;
-  stop: (immediate: boolean) => Promise<void>;
+  shutdown: (immediate: boolean) => Promise<void>;
 }
 
 export function createChainSyncClient(
-  context: InteractionContext,
+  context: OgmiosContext,
   rollForward: ChainSync.ChainSyncMessageHandlers["rollForward"],
   rollBackward: ChainSync.ChainSyncMessageHandlers["rollBackward"],
-  options?: { sanitizeJson?: boolean }
+  options?: { sanitizeJson?: boolean; sharedContext?: boolean }
 ): ChainSyncClient {
   // https://github.com/CardanoSolutions/ogmios/blob/master/clients/TypeScript/packages/client/src/ChainSync/ChainSyncClient.ts
   // Does not silence errors, and sequential by default (it's safer to handle blocks sequentially)
@@ -50,13 +50,14 @@ export function createChainSyncClient(
     options?.sanitizeJson ?? true
       ? (raw: string) => safeJSON.sanitize(JsonBig.parse(raw))
       : JsonBig.parse;
+  const willShutdownContext = !options?.sharedContext;
   async function onMessage(message: string) {
     const response: RequestNextResponse = parseJson(message);
     if (response.methodname === "RequestNext") await queue.push(response);
   }
   return {
     context,
-    start: async (points, inFlight = 100, onError) => {
+    startSync: async (points, inFlight = 100, onError) => {
       socket.on("message", onMessage);
       queueCatch(queue, onError);
       const source =
@@ -70,19 +71,15 @@ export function createChainSyncClient(
       for (let n = 0; n < inFlight; n++) requestNext();
       return { queue, intersection };
     },
-    stop: (immediate = true) =>
-      new Promise((resolve) => {
-        socket.removeListener("message", onMessage);
-        queue.drain = () => {
-          console.log("[Chain Sync] Queue Drained!");
-          resolve();
-        };
-        if (immediate) {
-          console.log("[Chain Sync] Queue Kill & Drain.");
-          queue.killAndDrain();
-        } else {
-          console.log("[Chain Sync] Queue Draining...");
-        }
-      }),
+    shutdown: async (immediate = true) => {
+      socket.removeListener("message", onMessage);
+      if (immediate) {
+        console.log("[Chain Sync] Queue Kill & Drain.");
+        queue.killAndDrain();
+      } else console.log("[Chain Sync] Queue Draining...");
+      await queue.drained();
+      console.log("[Chain Sync] Queue Drained!");
+      willShutdownContext && (await context.shutdown());
+    },
   };
 }

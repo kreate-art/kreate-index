@@ -21,7 +21,6 @@ const SHA256_BUF_PATTERN = /^sha256:([a-f0-9]{64})$/;
 
 ipfsProjectContentIndexer.setup = $setup(async ({ sql }) => {
   await sql`
-    -- TODO: Add index for 'custom_url'
     CREATE TABLE IF NOT EXISTS ipfs.project_content (
       cid text PRIMARY KEY,
       contents jsonb NOT NULL,
