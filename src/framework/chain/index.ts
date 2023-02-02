@@ -1,14 +1,6 @@
 import { scheduler } from "timers/promises";
 
-import {
-  ChainSync,
-  ConnectionConfig as OgmiosConnectionConfig,
-  createInteractionContext,
-  InteractionContext,
-  isBabbageBlock,
-  ServerNotReady,
-  StateQuery,
-} from "@cardano-ogmios/client";
+import { ChainSync, isBabbageBlock, StateQuery } from "@cardano-ogmios/client";
 import * as O from "@cardano-ogmios/schema";
 import fastq from "fastq";
 import * as L from "lucid-cardano";
@@ -93,7 +85,7 @@ export const setupGenesis = $setup(async ({ sql }) => {
 });
 
 type BaseChainIndexConnections = Connections<
-  "sql" | "lucid" | "notifications" | "views"
+  "sql" | "ogmios" | "lucid" | "notifications" | "views"
 >;
 export type ChainIndexConnections = BaseChainIndexConnections & {
   synchronized: fastq.queueAsPromised<() => unknown, unknown>;
@@ -157,7 +149,6 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
 
   // `clients` will be set by ChainIndexer.new. It's fine since the constructor is private.
   private readonly clients!: {
-    readonly interactionContext: InteractionContext;
     readonly chainSync: ChainSyncClient;
     readonly stateQuery: StateQuery.StateQueryClient;
   };
@@ -182,11 +173,9 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
   ) {}
 
   public static async new<TContext, TEvent extends IEvent>({
-    ogmios,
     connections,
     handlers,
   }: {
-    ogmios: { connection: OgmiosConnectionConfig };
     connections: BaseChainIndexConnections;
     handlers: ChainIndexHandlers<TContext, TEvent>;
   }): Promise<ChainIndexer<TContext, TEvent>> {
@@ -197,34 +186,15 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
       { ...connections, synchronized, slotTimeInterpreter },
       handlers
     );
-    const interactionContext = await (async () => {
-      for (;;) {
-        try {
-          return await createInteractionContext(
-            self.onClientError.bind(self),
-            self.onClientClose.bind(self),
-            { connection: ogmios.connection, interactionType: "LongRunning" }
-          );
-        } catch (e) {
-          if (e instanceof ServerNotReady) {
-            console.warn(`[Chain] Wait until Ogmios is ready :: ${e.message}`);
-            await scheduler.wait(5_000);
-          } else {
-            throw e;
-          }
-        }
-      }
-    })();
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore: This is the only time `clients` is set.
     self.clients = {
-      interactionContext,
       chainSync: createChainSyncClient(
-        interactionContext,
+        connections.ogmios,
         self.rollForward.bind(self),
         self.rollBackward.bind(self)
       ),
-      stateQuery: await StateQuery.createStateQueryClient(interactionContext),
+      stateQuery: await StateQuery.createStateQueryClient(connections.ogmios),
     };
     return self;
   }
@@ -281,11 +251,10 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
     console.log(`[Chain] Will start at: ${startAt}`);
 
     const csr = await (async () => {
-      const { interactionContext, chainSync } = this.clients;
+      const ogmios = this.connections.ogmios;
+      const chainSync = this.clients.chainSync;
       for (;;) {
-        const { tip } = await ChainSync.findIntersect(interactionContext, [
-          "origin",
-        ]);
+        const { tip } = await ChainSync.findIntersect(ogmios, ["origin"]);
         if (typeof startAt === "number" && slotFrom(tip) >= startAt) {
           await this.reloadSlotTimeInterpreter();
           return chainSync.start(points, inFlight, onError);
@@ -525,23 +494,11 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
       ]))
     );
     console.log(
-      `// Slot time interpreter stale after ${interpreter.staleSlot}.`
+      `// Slot time interpreter reloaded at ${interpreter.ledgerTipSlot}, ` +
+        `stale after ${interpreter.staleSlot}.`
     );
     this.connections.slotTimeInterpreter = interpreter;
-    console.log("Reloaded", this.connections.slotTimeInterpreter);
     return interpreter;
-  }
-
-  private onClientError(error: Error) {
-    console.error("[Ogmios] Error:", error);
-    throw error;
-  }
-
-  private onClientClose(code: number, reason: string) {
-    const status = this.status;
-    const message = `[Ogmios] Close (${code}) ${reason}`;
-    if (status === "active" || status == "starting") throw new Error(message);
-    else console.warn(message);
   }
 }
 

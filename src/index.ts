@@ -46,15 +46,15 @@ const teikiChainIndexer: Indexer = {
   setup: chainIndexer.setup,
   run: async () => {
     const cc = config.chainIndex();
-    const indexer = await chainIndexer({
-      ogmios: { connection: cc.OGMIOS_CONNECTION_CONFIG },
-      connections: await connections.provide(
+    const indexer = await chainIndexer(
+      await connections.provide(
         "sql",
+        "ogmios",
         "lucid",
         "notifications",
         "views"
-      ),
-    });
+      )
+    );
 
     const { intersection } = await indexer.start({
       context: {

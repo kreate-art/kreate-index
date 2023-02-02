@@ -50,13 +50,14 @@ export function createChainSyncClient(
     options?.sanitizeJson ?? true
       ? (raw: string) => safeJSON.sanitize(JsonBig.parse(raw))
       : JsonBig.parse;
+  async function onMessage(message: string) {
+    const response: RequestNextResponse = parseJson(message);
+    if (response.methodname === "RequestNext") await queue.push(response);
+  }
   return {
     context,
     start: async (points, inFlight = 100, onError) => {
-      socket.on("message", async (message: string) => {
-        const response: RequestNextResponse = parseJson(message);
-        if (response.methodname === "RequestNext") await queue.push(response);
-      });
+      socket.on("message", onMessage);
       queueCatch(queue, onError);
       const source =
         points === "origin"
@@ -71,22 +72,17 @@ export function createChainSyncClient(
     },
     stop: (immediate = true) =>
       new Promise((resolve) => {
-        const cleanup = () => {
-          queue.drain = () => {
-            console.log("[Chain Sync] Queue Drained!");
-            resolve();
-          };
-          if (immediate) {
-            console.log("[Chain Sync] Queue Kill & Drain.");
-            queue.killAndDrain();
-          } else {
-            console.log("[Chain Sync] Queue Draining...");
-          }
+        socket.removeListener("message", onMessage);
+        queue.drain = () => {
+          console.log("[Chain Sync] Queue Drained!");
+          resolve();
         };
-        if (socket.readyState !== socket.CLOSED) {
-          socket.once("close", cleanup);
-          socket.close();
-        } else cleanup();
+        if (immediate) {
+          console.log("[Chain Sync] Queue Kill & Drain.");
+          queue.killAndDrain();
+        } else {
+          console.log("[Chain Sync] Queue Draining...");
+        }
       }),
   };
 }

@@ -45,6 +45,14 @@ export function database() {
   };
 }
 
+export function ogmios() {
+  return {
+    host: requiredEnv("OGMIOS_HOST"),
+    port: parseInt(requiredEnv("OGMIOS_PORT")),
+    // TODO: Add OGMIOS_TLS, or better, parse from a single env
+  } as ConnectionConfig;
+}
+
 export function ipfs() {
   return {
     IPFS_SERVER_URL: requiredEnv("IPFS_SERVER_URL"),
@@ -66,11 +74,6 @@ export function discord() {
 // TODO: Remove these...
 export function chainIndex() {
   return {
-    OGMIOS_CONNECTION_CONFIG: {
-      host: requiredEnv("OGMIOS_HOST"),
-      port: parseInt(requiredEnv("OGMIOS_PORT")),
-      // TODO: Add OGMIOS_TLS, or better, parse from a single env
-    } as ConnectionConfig,
     CHAIN_INDEX_BEGIN: parseChainIndexStart(requiredEnv("CHAIN_INDEX_BEGIN")),
     CHAIN_INDEX_END: parseChainIndexEnd(process.env.CHAIN_INDEX_END),
     CHAIN_INDEX_END_DELAY: Number(process.env.CHAIN_INDEX_END_DELAY || 0),
