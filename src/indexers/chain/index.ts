@@ -1,6 +1,5 @@
 import { $setup, Setup } from "../../framework/base";
 import { $handlers, ChainIndexer, setupGenesis } from "../../framework/chain";
-import { Simplify } from "../../types/typelevel";
 
 import * as backing from "./backing";
 import { TeikiChainIndexContext } from "./context";
@@ -35,12 +34,10 @@ const setups: Setup[] = [
   teiki_plant.setup,
 ];
 
-export function chainIndexer({
-  ogmios,
-  connections,
-}: Simplify<Omit<Parameters<typeof creator>[0], "handlers">>) {
+export function chainIndexer(
+  connections: Parameters<typeof creator>[0]["connections"]
+) {
   return creator({
-    ogmios,
     connections,
     handlers: {
       initializers: [treasury.initialize],
