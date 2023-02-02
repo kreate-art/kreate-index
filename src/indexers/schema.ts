@@ -171,7 +171,8 @@ async function setupProjectCustomUrlView(sql: Sql) {
 async function setupProjectSummaryView(sql: Sql) {
   await sql`
     CREATE MATERIALIZED VIEW IF NOT EXISTS views.project_summary AS
-    WITH x_p AS (
+    WITH
+    x_project AS (
       SELECT
         p.project_id AS pid,
         p.status,
@@ -182,11 +183,11 @@ async function setupProjectSummaryView(sql: Sql) {
       WHERE
         o.spent_slot IS NULL
     ),
-    x_pd AS (
+    x_project_time AS (
       SELECT
         upd.pid,
         b1.time AS created_time,
-        b2.time AS last_community_update_time
+        b2.time AS last_announcement_time
       FROM (
         SELECT
           pd.project_id AS pid,
@@ -194,40 +195,68 @@ async function setupProjectSummaryView(sql: Sql) {
           max(
             CASE WHEN pd.last_community_update_cid IS NOT NULL THEN
               o.created_slot
-            END) AS last_community_update_slot
+            END) AS last_announcement_slot
       FROM
         chain.project_detail pd
         INNER JOIN chain.output o ON pd.id = o.id
       GROUP BY
         pd.project_id) upd
       INNER JOIN chain.block b1 ON b1.slot = upd.created_slot
-      LEFT JOIN chain.block b2 ON b2.slot = upd.last_community_update_slot
+      LEFT JOIN chain.block b2 ON b2.slot = upd.last_announcement_slot
     ),
-    x_b AS (
+    x_backing AS (
       SELECT
         b.project_id AS pid,
-        count(DISTINCT b.backer_address) AS backers_count,
+        count(DISTINCT b.backer_address) AS backer_count,
         sum(b.backing_amount) AS total_backing_amount
       FROM
         chain.backing b
         INNER JOIN chain.output o ON b.id = o.id
-        WHERE
-          o.spent_slot IS NULL
-        GROUP BY
-          b.project_id
+      WHERE
+        o.spent_slot IS NULL
+      GROUP BY
+        b.project_id
+    ),
+    x_funds_w AS (
+      SELECT
+        pd.project_id AS pid,
+        pd.withdrawn_funds
+      FROM
+        chain.project_detail pd
+        INNER JOIN chain.output o ON pd.id = o.id
+      WHERE
+        o.spent_slot IS NULL
+    ),
+    x_funds_a AS (
+      SELECT
+        ps.project_id AS pid,
+        sum(s.rewards) AS available_funds
+      FROM
+        chain.project_script ps
+        INNER JOIN chain.output o ON ps.id = o.id
+        INNER JOIN chain.staking s ON ps.staking_script_hash = s.hash
+      WHERE
+        o.spent_slot IS NULL
+      GROUP BY
+        ps.project_id
     )
     SELECT
-      x_p.pid AS project_id,
-      x_p.status,
-      x_p.owner_address,
-      x_pd.created_time,
-      x_pd.last_community_update_time,
-      coalesce(x_b.backers_count, 0) AS backers_count,
-      coalesce(x_b.total_backing_amount, 0) AS total_backing_amount
+      x_project.pid AS project_id,
+      x_project.status,
+      x_project.owner_address,
+      x_project_time.created_time,
+      x_project_time.last_announcement_time,
+      coalesce(x_backing.backer_count, 0) AS backer_count,
+      coalesce(x_backing.total_backing_amount, 0) AS total_backing_amount,
+      x_funds_w.withdrawn_funds,
+      coalesce(x_funds_a.available_funds, 0) AS available_funds,
+      (x_funds_w.withdrawn_funds + coalesce(x_funds_a.available_funds, 0)) AS total_raised_funds
     FROM
-      x_p
-      LEFT JOIN x_pd ON x_p.pid = x_pd.pid
-      LEFT JOIN x_b ON x_p.pid = x_b.pid
+      x_project
+      LEFT JOIN x_project_time ON x_project.pid = x_project_time.pid
+      LEFT JOIN x_backing ON x_project.pid = x_backing.pid
+      LEFT JOIN x_funds_w ON x_project.pid = x_funds_w.pid
+      LEFT JOIN x_funds_a ON x_project.pid = x_funds_a.pid;
   `;
   await sql`
     CREATE UNIQUE INDEX IF NOT EXISTS project_summary_pid_index
