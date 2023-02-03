@@ -8,8 +8,6 @@ import {
   VitalConnections,
 } from "../../framework/polling";
 
-// TODO: Proper M:N mappings
-
 export type AiOcrContext = {
   aiServerUrl: string;
   ipfsGatewayUrl: string;
@@ -47,10 +45,10 @@ export function aiOcrIndexer(
           pm.media_cid AS id
         FROM
           ipfs.project_media pm
-        LEFT JOIN ai.ocr ocr ON pm.media_cid = ocr.media_cid
+        LEFT JOIN ai.ocr ocr
+          ON pm.media_cid = ocr.media_cid
         WHERE
           ocr.media_cid IS NULL
-          AND pm.media_cid IS NOT NULL
         LIMIT ${TASKS_PER_FETCH};
       `;
       return { tasks, continue: tasks.length >= TASKS_PER_FETCH };

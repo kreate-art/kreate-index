@@ -37,17 +37,18 @@ ipfsProjectContentIndexer.setup = $setup(async ({ sql }) => {
   `;
 
   await sql`
-    CREATE TABLE IF NOT EXISTS ipfs.logo_used (
-      cid TEXT PRIMARY KEY
+    CREATE TABLE IF NOT EXISTS ipfs.project_media (
+      project_cid TEXT,
+      media_cid TEXT,
+      -- media_cid is often used in queries than project_cid
+      PRIMARY KEY (media_cid, project_cid)
     )
   `;
 
   await sql`
-      CREATE TABLE IF NOT EXISTS ipfs.project_media (
-        project_cid TEXT,
-        media_cid TEXT,
-        PRIMARY KEY (project_cid, media_cid)
-      )
+    CREATE TABLE IF NOT EXISTS ipfs.logo_used (
+      cid TEXT PRIMARY KEY
+    )
   `;
 });
 
@@ -122,17 +123,18 @@ export function ipfsProjectContentIndexer(
       };
 
       if (projectContent.bufs != null) {
-        await Promise.all(
-          Object.values(projectContent.bufs).map(async (mediaCid) => {
-            await sql`
-              INSERT INTO ipfs.project_media ${sql({
-                projectCid: id,
-                mediaCid,
-              })}
-                ON CONFLICT DO NOTHING
-            `;
-          })
-        );
+        const medias = [];
+        for (const mediaCid of Object.values(projectContent.bufs)) {
+          if (!mediaCid) continue;
+          medias.push({ projectCid: id, mediaCid: mediaCid as string });
+        }
+        if (medias.length) {
+          await sql`
+            INSERT INTO ipfs.project_media ${sql(medias)}
+              ON CONFLICT DO NOTHING
+          `;
+          notifications.notify("ai.ocr");
+        }
       }
 
       await sql`
