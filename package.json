@@ -32,7 +32,7 @@
     "ipfs-http-client": "60.0.0",
     "lucid-cardano": "^0.8.8",
     "node-fetch": "^3.3.0",
-    "postgres": "^3.3.3",
+    "postgres": "github:porsager/postgres#df0343d25e01f21cc8df0e8497fb90b4272d2f41",
     "prexit": "^2.0.2",
     "throttle-debounce": "^5.0.0"
   },
