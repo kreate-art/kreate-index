@@ -208,7 +208,7 @@ async function setupProjectSummaryView(sql: Sql) {
       SELECT
         b.project_id AS pid,
         count(DISTINCT b.backer_address) AS backer_count,
-        sum(b.backing_amount) AS total_backing_amount
+        sum(b.backing_amount)::bigint AS total_backing_amount
       FROM
         chain.backing b
         INNER JOIN chain.output o ON b.id = o.id
@@ -230,7 +230,7 @@ async function setupProjectSummaryView(sql: Sql) {
     x_funds_a AS (
       SELECT
         ps.project_id AS pid,
-        sum(s.rewards) AS available_funds
+        sum(s.rewards)::bigint AS available_funds
       FROM
         chain.project_script ps
         INNER JOIN chain.output o ON ps.id = o.id
