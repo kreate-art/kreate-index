@@ -70,7 +70,7 @@ export function aiOcrIndexer(
         if (res.ok) {
           const data = await res.json();
           if (data == null)
-            throw new Error(`Response invalid: ${toJson(data)}`);
+            throw new Error(`Response invalid (${id}): ${toJson(data)}`);
           await sql`
             INSERT INTO ai.ocr ${sql({
               mediaCid: id,
@@ -80,7 +80,7 @@ export function aiOcrIndexer(
           `;
           console.log(`[ai.ocr] OK: ${id}`);
         } else {
-          const error = `Response: ${res.status} - ${
+          const error = `Response (${id}): ${res.status} - ${
             res.statusText
           }: ${await res.text()}`;
           if (res.status >= 400 && res.status < 500) {
