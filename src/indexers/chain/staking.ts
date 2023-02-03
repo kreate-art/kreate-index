@@ -4,9 +4,10 @@ import { PoolId, RewardAddress } from "lucid-cardano";
 import { debounce } from "throttle-debounce";
 
 import { Connections } from "../../connections";
-import { $setup } from "../../framework/base";
+import { $setup, ErrorHandler, reduceErrorHandler } from "../../framework/base";
 import { $handlers } from "../../framework/chain";
 import { slotFrom } from "../../framework/chain/conversions";
+import { OgmiosContext } from "../../ogmios";
 import { Lovelace } from "../../types/chain";
 import { StakingHash, StakingType } from "../../types/staking";
 import { MaybePromise } from "../../types/typelevel";
@@ -16,7 +17,7 @@ import { TeikiChainIndexContext } from "./context";
 // TODO: This will break if a StakeKey and a StakeScript shares the same blake2b-224
 // However it is fine since we never use StakeKey in Teiki anyways.
 
-const DEFAULT_DEBOUNCE = 500; // 0.5s
+const DEFAULT_DEBOUNCE = 250; // 0.25s
 const DEFAULT_INTERVAL = 300_000; // 5 minute
 
 export type ChainStaking = {
@@ -48,6 +49,7 @@ type VitalConnections = Connections<"sql" | "ogmios" | "lucid" | "views">;
 export function createIndexer({
   connections,
   options,
+  onError,
   onReloaded,
 }: {
   connections: VitalConnections;
@@ -55,6 +57,7 @@ export function createIndexer({
     debounce?: number;
     interval?: number;
   };
+  onError?: ErrorHandler;
   onReloaded?: (_: {
     connections: VitalConnections;
     reloaded: StakingHash[];
@@ -67,13 +70,26 @@ export function createIndexer({
   const revRegistry: Map<RewardAddress, StakingHash> = new Map();
   let fullReload = false;
   let willReloadDynamically = false;
-
   let isActive = false;
-  let debounced: debounce<() => Promise<void>>;
-  let client: StateQuery.StateQueryClient;
-  let scheduled: NodeJS.Timeout | null = null;
 
+  let ogmiosContext: OgmiosContext;
+  let client: StateQuery.StateQueryClient;
+
+  let debounced: debounce<() => Promise<void>>;
+  let scheduled: NodeJS.Timeout | null = null;
   const delay = options?.interval ?? DEFAULT_INTERVAL;
+
+  const handleError = reduceErrorHandler(onError, (error) => {
+    stop();
+    throw error;
+  });
+
+  function clearScheduled() {
+    if (scheduled) {
+      clearTimeout(scheduled);
+      scheduled = null;
+    }
+  }
 
   function reload(hashes: StakingHash[] | null) {
     if (fullReload) return;
@@ -87,24 +103,39 @@ export function createIndexer({
     }
   }
 
+  async function stop() {
+    if (isActive) {
+      console.log("[staking] Stopping...");
+      isActive = false;
+      clearScheduled();
+      debounced.cancel();
+      await ogmiosContext.shutdown(() => client.shutdown());
+      console.log("[staking] Stopped!");
+    } else {
+      console.warn("[staking] Already stopped.");
+    }
+  }
+
   return {
     start: async function () {
       console.log("[staking] Starting...");
-      const ogmiosContext = await ogmios.create("staking");
-      const client = await StateQuery.createStateQueryClient(ogmiosContext);
-      debounced = debounce(options?.debounce ?? DEFAULT_DEBOUNCE, doReload);
+      ogmiosContext = await ogmios.create("staking");
+      client = await StateQuery.createStateQueryClient(ogmiosContext);
+
+      debounced = debounce(options?.debounce ?? DEFAULT_DEBOUNCE, () =>
+        doReload().catch(handleError)
+      );
+
       isActive = true;
       console.log("[staking] Started!");
 
+      // Multiple instances of this might be run at the same time, but it's completely fine
       async function doReload() {
-        if (scheduled) {
-          clearTimeout(scheduled);
-          scheduled = null;
-        }
+        clearScheduled();
         if (!isActive) {
           console.warn(
             `[staking] Inactive. Ignored Reload: ${
-              fullReload ? "ALL" : Array.from(pending.values())
+              fullReload ? "Everything" : Array.from(pending.values())
             }`
           );
           pending.size && pending.clear();
@@ -115,8 +146,10 @@ export function createIndexer({
         );
 
         let toReload: RewardAddress[] | undefined = undefined;
-        if (fullReload) {
+        const wasFullReload = fullReload;
+        if (wasFullReload) {
           toReload = Array.from(registry.values());
+          fullReload = false;
         } else if (pending.size) {
           toReload = [];
           for (const hash of pending.values()) {
@@ -159,23 +192,15 @@ export function createIndexer({
           if (onReloaded)
             await onReloaded({ connections, reloaded: toReload, fullReload });
         }
-        fullReload = false;
-        console.log(`[staking] Schedule one in ${(delay / 1000).toFixed(1)}s`);
-        scheduled = setTimeout(() => reload(null), delay);
+        if (!scheduled) {
+          console.log(
+            `[staking] Schedule one in ${(delay / 1000).toFixed(1)}s`
+          );
+          scheduled = setTimeout(() => reload(null), delay);
+        }
       }
     },
-    stop: async function () {
-      if (isActive) {
-        console.log("[staking] Stopping...");
-        isActive = false;
-        scheduled && clearTimeout(scheduled);
-        debounced.cancel();
-        await client.shutdown();
-        console.log("[staking] Stopped!");
-      } else {
-        console.warn("[staking] Already stopped.");
-      }
-    },
+    stop,
     register: function (hash: StakingHash, type: StakingType) {
       const address = lucid.utils.credentialToRewardAddress({ type, hash });
       registry.set(hash, address);

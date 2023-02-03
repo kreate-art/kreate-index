@@ -18,9 +18,9 @@ export function $setup(setup: Setup) {
   return setup;
 }
 
-export type ErrorHandler = (error: Error, finish: ErrorCallback) => void;
+export type ErrorHandler = (error: unknown, finish: ErrorCallback) => void;
 
-type ErrorCallback = (error: Error) => void;
+type ErrorCallback = (error: unknown) => void;
 
 export function queueCatch(
   queue: fastq.queue,
@@ -31,7 +31,7 @@ export function queueCatch(
     reduceErrorHandler(
       onError,
       finish ??
-        ((error: Error) => {
+        ((error: unknown) => {
           queue.killAndDrain();
           throw error;
         })
@@ -41,7 +41,7 @@ export function queueCatch(
 
 export function reduceErrorHandler(
   onError?: ErrorHandler,
-  finish: ErrorCallback = (error: Error) => {
+  finish: ErrorCallback = (error: unknown) => {
     throw error;
   }
 ): ErrorCallback {

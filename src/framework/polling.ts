@@ -106,13 +106,18 @@ export function createPollingIndexer<
     let lastExecution: UnixTime = 0;
     let scheduled: NodeJS.Timeout | null = null;
 
-    const finish = (error: Error) => {
+    function clearScheduled() {
+      if (scheduled) {
+        clearTimeout(scheduled);
+        scheduled = null;
+      }
+    }
+
+    const errorCallback = reduceErrorHandler(onError, (error) => {
       assert(finalize, `[${name}] Finalize must be set.`);
       finalize();
       throw error;
-    };
-
-    const errorCallback = reduceErrorHandler(onError, finish);
+    });
     const pollingQueue = fastq.promise(doPoll, 1);
     pollingQueue.error(errorCallback);
 
@@ -164,7 +169,7 @@ export function createPollingIndexer<
 
     finalize = async () => {
       console.log(`[${name}] Stopping...`);
-      scheduled && clearTimeout(scheduled);
+      clearScheduled();
       pollingQueue.killAndDrain();
       taskQueue?.killAndDrain();
       await Promise.all(unlistens.map((un) => un()));
@@ -173,12 +178,9 @@ export function createPollingIndexer<
     };
 
     async function doPoll(trigger: PollingTrigger) {
-      if (finalize == null) return;
+      clearScheduled();
 
-      if (scheduled) {
-        clearTimeout(scheduled);
-        scheduled = null;
-      }
+      if (finalize == null) return;
 
       const now = new Date();
       lastExecution = +now;
