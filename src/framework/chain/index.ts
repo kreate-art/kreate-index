@@ -22,7 +22,7 @@ import {
   WithId,
 } from "../../types/chain";
 import { MaybePromise, NonEmpty } from "../../types/typelevel";
-import { $setup, Setup } from "../base";
+import { $setup, ErrorHandler, Setup } from "../base";
 
 import {
   ChainSyncClient,
@@ -230,7 +230,7 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
     inFlight?: number;
     // For finding intersection on start
     checkpointHistory?: number;
-    onError?: (error: Error) => void;
+    onError?: ErrorHandler;
   }): Promise<ChainSyncReturn> {
     assert(this.status === "inactive", "[Chain] Already started.");
     this.status = "starting";

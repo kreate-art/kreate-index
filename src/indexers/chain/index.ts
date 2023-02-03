@@ -89,7 +89,12 @@ export async function getChainIndexer(connections: BaseChainIndexConnections) {
           views.refresh("views.project_summary");
         }),
       ],
-      onceInSync: [async () => stakingIndexer.toggleReloadDynamically(true)],
+      onceInSync: [
+        async () => {
+          stakingIndexer.toggleReloadDynamically(true);
+          stakingIndexer.reload(null);
+        },
+      ],
     },
   });
   return Object.assign(chainIndexer, {

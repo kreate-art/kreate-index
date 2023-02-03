@@ -8,6 +8,8 @@ import {
   ServerNotReady,
 } from "@cardano-ogmios/client";
 
+import { MaybePromise } from "./types/typelevel";
+
 export type OgmiosContextFactory = {
   contexts: OgmiosContext[];
   create: (
@@ -16,16 +18,19 @@ export type OgmiosContextFactory = {
       interactionType?: InteractionType;
     }
   ) => Promise<OgmiosContext>;
-  shutdown: () => Promise<void>;
+  shutdown: (
+    fn?: (context: OgmiosContext) => MaybePromise<void>
+  ) => Promise<void>;
 };
 
 export type OgmiosContext = InteractionContext & {
   name: string;
-  shutdown: () => Promise<void>;
+  shutdown: (fn?: () => MaybePromise<void>) => Promise<void>;
 };
 
 export function createOgmiosContextFactory(
-  connection: ConnectionConfig
+  connection: ConnectionConfig,
+  fn?: (context: OgmiosContext) => MaybePromise<void>
 ): OgmiosContextFactory {
   const contexts: OgmiosContext[] = [];
   return {
@@ -39,7 +44,9 @@ export function createOgmiosContextFactory(
       return context;
     },
     shutdown: async function () {
-      await Promise.all(contexts.map((c) => c.shutdown()));
+      await Promise.all(
+        contexts.map((c) => c.shutdown(fn ? () => fn(c) : undefined))
+      );
       contexts.length = 0;
     },
   };
@@ -77,11 +84,15 @@ export async function createOgmiosContext(
       return {
         ...context,
         name,
-        shutdown: async function (this: OgmiosContext): Promise<void> {
+        shutdown: async function (
+          this: OgmiosContext,
+          fn?: () => MaybePromise<void>
+        ): Promise<void> {
+          this.shutdown = Promise.resolve.bind(Promise);
+          isShuttingDown = true;
+          fn && (await fn());
           await new Promise<void>((resolve, reject) => {
-            this.shutdown = Promise.resolve.bind(Promise);
             const socket = this.socket;
-            isShuttingDown = true;
             switch (socket.readyState) {
               case socket.CONNECTING:
                 console.warn(`${tag} just connecting...`);
