@@ -79,7 +79,7 @@ export function createIndexer({
   let scheduled: NodeJS.Timeout | null = null;
   const delay = options?.interval ?? DEFAULT_INTERVAL;
 
-  const handleError = reduceErrorHandler(onError, (error) => {
+  const errorCallback = reduceErrorHandler(onError, (error) => {
     stop();
     throw error;
   });
@@ -123,7 +123,7 @@ export function createIndexer({
       client = await StateQuery.createStateQueryClient(ogmiosContext);
 
       debounced = debounce(options?.debounce ?? DEFAULT_DEBOUNCE, () =>
-        doReload().catch(handleError)
+        doReload().catch(errorCallback)
       );
 
       isActive = true;

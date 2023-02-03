@@ -60,7 +60,6 @@ export function aiOcrIndexer(
         context: { aiServerUrl, ipfsGatewayUrl },
       } = this;
       try {
-        console.log(`${ipfsGatewayUrl}/ipfs/${id}`);
         const res = await fetch(`${aiServerUrl}/text-recognition`, {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },

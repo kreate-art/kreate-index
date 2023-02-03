@@ -114,8 +114,7 @@ export function createPollingIndexer<
     }
 
     const errorCallback = reduceErrorHandler(onError, (error) => {
-      assert(finalize, `[${name}] Finalize must be set.`);
-      finalize();
+      finalize && finalize();
       throw error;
     });
     const pollingQueue = fastq.promise(doPoll, 1);
