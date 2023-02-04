@@ -28,7 +28,11 @@ export type ChainStaking = {
   reloadedSlot: Slot;
 };
 
-export type Event = { type: "staking$reload"; hashes: Set<StakingHash> };
+export type Event = {
+  type: "staking";
+  reload: StakingHash[];
+  remove: StakingHash[];
+};
 const $ = $handlers<TeikiChainIndexContext, Event>();
 
 export const setup = $setup(async ({ sql }) => {
@@ -65,7 +69,8 @@ export function createIndexer({
   }) => MaybePromise<void>;
 }) {
   const { sql, ogmios, lucid } = connections;
-  const pending: Set<StakingHash> = new Set();
+  const toReload: Set<StakingHash> = new Set();
+  const toRemove: Set<StakingHash> = new Set();
   const registry: Map<StakingHash, RewardAddress> = new Map();
   const revRegistry: Map<RewardAddress, StakingHash> = new Map();
   let fullReload = false;
@@ -76,29 +81,20 @@ export function createIndexer({
   let client: StateQuery.StateQueryClient;
 
   let debounced: debounce<() => Promise<void>>;
-  let scheduled: NodeJS.Timeout | null = null;
-  const delay = options?.interval ?? DEFAULT_INTERVAL;
+  let timer: NodeJS.Timer;
 
   const errorCallback = reduceErrorHandler(onError, (error) => {
     stop();
     throw error;
   });
 
-  function clearScheduled() {
-    if (scheduled) {
-      clearTimeout(scheduled);
-      scheduled = null;
-    }
-  }
-
   function reload(hashes: StakingHash[] | null) {
     if (fullReload) return;
     if (hashes == null) {
       fullReload = true;
-      pending.size && pending.clear();
       debounced();
     } else {
-      for (const hash of hashes) pending.add(hash);
+      for (const hash of hashes) toReload.add(hash);
       willReloadDynamically && debounced();
     }
   }
@@ -107,7 +103,7 @@ export function createIndexer({
     if (isActive) {
       console.log("[staking] Stopping...");
       isActive = false;
-      clearScheduled();
+      clearInterval(timer);
       debounced.cancel();
       await ogmiosContext.shutdown(() => client.shutdown());
       console.log("[staking] Stopped!");
@@ -125,44 +121,48 @@ export function createIndexer({
       debounced = debounce(options?.debounce ?? DEFAULT_DEBOUNCE, () =>
         doReload().catch(errorCallback)
       );
+      timer = setInterval(
+        () => reload(null),
+        options?.interval ?? DEFAULT_INTERVAL
+      );
 
       isActive = true;
       console.log("[staking] Started!");
 
       // Multiple instances of this might be run at the same time, but it's completely fine
       async function doReload() {
-        clearScheduled();
         if (!isActive) {
           console.warn(
             `[staking] Inactive. Ignored Reload: ${
-              fullReload ? "Everything" : Array.from(pending.values())
+              fullReload ? "All" : Array.from(toReload.values())
             }`
           );
-          pending.size && pending.clear();
+          toReload.size && toReload.clear();
           return;
         }
-        console.log(
-          `[staking] Reloading: ${fullReload ? "Everything" : pending.size}...`
-        );
 
-        let toReload: RewardAddress[] | undefined = undefined;
+        let batch: RewardAddress[] | undefined = undefined;
         const wasFullReload = fullReload;
         if (wasFullReload) {
-          toReload = Array.from(registry.values());
+          console.log("[staking] Reloading: All...");
+          batch = Array.from(registry.values());
           fullReload = false;
-        } else if (pending.size) {
-          toReload = [];
-          for (const hash of pending.values()) {
+          toReload.size && toReload.clear();
+        } else if (toReload.size) {
+          console.log(`[staking] Reloading: ${toReload.size}...`);
+          batch = [];
+          for (const hash of toReload.values()) {
             const address = registry.get(hash);
-            if (address) toReload.push(address);
+            if (address) batch.push(address);
             else console.warn(`[staking] Address (to) not found for: ${hash}`);
           }
-          pending.clear();
+          toReload.clear();
         }
-        if (toReload?.length) {
+
+        if (batch?.length) {
           const [tip, response] = await Promise.all([
             client.ledgerTip(),
-            client.delegationsAndRewards(toReload),
+            client.delegationsAndRewards(batch),
           ]);
           const stakings: ChainStaking[] = [];
           for (const [hash, entry] of Object.entries(response)) {
@@ -176,6 +176,11 @@ export function createIndexer({
               rewards: entry.rewards ?? 0n,
               reloadedSlot: slotFrom(tip),
             });
+            if (toRemove.has(hash)) {
+              registry.delete(hash);
+              revRegistry.delete(address);
+              console.log(`[staking] Removed: ${hash} - ${address}`);
+            }
           }
           await sql`
             INSERT INTO chain.staking ${sql(stakings)}
@@ -186,26 +191,27 @@ export function createIndexer({
                   reloaded_slot = EXCLUDED.reloaded_slot
           `;
           console.log(
-            `[staking] Reloaded: ${toReload.length} ! ` +
+            `[staking] Reloaded: ${batch.length} ! ` +
               (tip === "origin" ? "origin" : `${tip.slot} | ${tip.hash}`)
           );
           if (onReloaded)
-            await onReloaded({ connections, reloaded: toReload, fullReload });
-        }
-        if (!scheduled) {
-          console.log(
-            `[staking] Schedule one in ${(delay / 1000).toFixed(1)}s`
-          );
-          scheduled = setTimeout(() => reload(null), delay);
+            await onReloaded({ connections, reloaded: batch, fullReload });
         }
       }
     },
     stop,
+    reset: function () {
+      registry.clear();
+      revRegistry.clear();
+      toReload.clear();
+      toRemove.clear();
+      console.log(`[staking] Reset!`);
+    },
     register: function (hash: StakingHash, type: StakingType) {
       const address = lucid.utils.credentialToRewardAddress({ type, hash });
       registry.set(hash, address);
       revRegistry.set(address, hash);
-      console.log(`[staking] Registered: ${hash} - ${type} = ${address}`);
+      console.log(`[staking] Registered: (${type}) ${hash} - ${address}`);
     },
     batchRegister: function (hashes: StakingHash[], type: StakingType) {
       for (const hash of hashes) {
@@ -216,10 +222,8 @@ export function createIndexer({
       console.log(`[staking] Registered: A batch of ${hashes.length} ${type}`);
     },
     deregister: function (hash: StakingHash): boolean {
-      const address = registry.get(hash);
-      if (address) {
-        registry.delete(hash);
-        revRegistry.delete(address);
+      if (registry.has(hash)) {
+        toRemove.add(hash);
         console.log(`[staking] Deregistered: ${hash}`);
         return true;
       } else {
@@ -250,25 +254,30 @@ export const filter = $.filter((params) => {
   if (!params.inSync) return null;
   const staking = params.context.staking;
   const body = params.tx.body;
-  const hashes = new Set<StakingHash>();
+  const reload = [];
+  const remove = [];
   for (const cert of body.certificates) {
     if ("stakeDelegation" in cert) {
       const hash = cert.stakeDelegation.delegator;
-      staking.isHashRegistered(hash) && hashes.add(hash);
+      staking.isHashRegistered(hash) && reload.push(hash);
     } else if ("stakeKeyDeregistration" in cert) {
       const hash = cert.stakeKeyDeregistration;
-      staking.isHashRegistered(hash) && hashes.add(hash);
+      if (staking.isHashRegistered(hash)) {
+        remove.push(hash);
+        reload.push(hash);
+      }
     }
   }
   for (const address in body.withdrawals) {
     const hash = staking.fromAddress(address);
-    hash && hashes.add(hash);
+    hash && reload.push(hash);
   }
-  return hashes.size ? [{ type: "staking$reload", hashes }] : null;
+  return reload.length ? [{ type: "staking", reload, remove }] : null;
 });
 
-export const reloadEvent = $.event(
-  ({ context: { staking }, event: { hashes } }) => {
-    staking.reload(Array.from(hashes));
+export const event = $.event(
+  ({ context: { staking }, event: { reload, remove } }) => {
+    for (const hash of remove) staking.deregister(hash);
+    staking.reload(reload);
   }
 );
