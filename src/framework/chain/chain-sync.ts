@@ -57,9 +57,12 @@ export function createChainSyncClient(
   }
   return {
     context,
-    startSync: async (points, inFlight = 100, onError) => {
+    startSync: async function (points, inFlight = 100, onError) {
       socket.on("message", onMessage);
-      queueCatch(queue, onError);
+      queueCatch(queue, onError, async (error) => {
+        await this.shutdown(true);
+        throw error;
+      });
       const source =
         points === "origin"
           ? ["origin" as O.Origin]
@@ -71,7 +74,7 @@ export function createChainSyncClient(
       for (let n = 0; n < inFlight; n++) requestNext();
       return { queue, intersection };
     },
-    shutdown: async (immediate = true) => {
+    shutdown: async function (immediate = true) {
       socket.removeListener("message", onMessage);
       if (immediate) {
         console.log("[Chain Sync] Queue Kill & Drain.");

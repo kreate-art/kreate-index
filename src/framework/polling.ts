@@ -113,8 +113,8 @@ export function createPollingIndexer<
       }
     }
 
-    const errorCallback = reduceErrorHandler(onError, (error) => {
-      finalize && finalize();
+    const errorCallback = reduceErrorHandler(onError, async (error) => {
+      finalize && (await finalize());
       throw error;
     });
     const pollingQueue = fastq.promise(doPoll, 1);

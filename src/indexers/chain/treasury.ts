@@ -53,9 +53,7 @@ export const initialize = $.initialize(
   async ({
     connections: { sql },
     context: {
-      dedicatedTreasuryVScriptHashes,
-      sharedTreasuryVScriptHashes,
-      openTreasuryVScriptHashes,
+      scriptHashes: { dedicatedTreasuryV, sharedTreasuryV, openTreasuryV },
     },
   }) => {
     const results = await sql<
@@ -66,15 +64,11 @@ export const initialize = $.initialize(
 
     for (const row of results) {
       const registry = row.datumJson.registry;
-      dedicatedTreasuryVScriptHashes.add(
+      dedicatedTreasuryV.add(
         registry.dedicatedTreasuryValidator.latest.script.hash
       );
-      sharedTreasuryVScriptHashes.add(
-        registry.sharedTreasuryValidator.latest.script.hash
-      );
-      openTreasuryVScriptHashes.add(
-        registry.openTreasuryValidator.latest.script.hash
-      );
+      sharedTreasuryV.add(registry.sharedTreasuryValidator.latest.script.hash);
+      openTreasuryV.add(registry.openTreasuryValidator.latest.script.hash);
     }
   }
 );
@@ -83,9 +77,7 @@ export const filter = $.filter(
   ({
     tx,
     context: {
-      dedicatedTreasuryVScriptHashes,
-      sharedTreasuryVScriptHashes,
-      openTreasuryVScriptHashes,
+      scriptHashes: { dedicatedTreasuryV, sharedTreasuryV, openTreasuryV },
     },
   }) => {
     const dedicatedTreasuryIndicies: number[] = [];
@@ -97,12 +89,11 @@ export const filter = $.filter(
         getAddressDetailsSafe(address)?.paymentCredential?.hash;
       if (!scriptHash) continue;
 
-      if (dedicatedTreasuryVScriptHashes.has(scriptHash))
+      if (dedicatedTreasuryV.has(scriptHash))
         dedicatedTreasuryIndicies.push(index);
-      else if (sharedTreasuryVScriptHashes.has(scriptHash))
+      else if (sharedTreasuryV.has(scriptHash))
         sharedTreasuryIndicies.push(index);
-      else if (openTreasuryVScriptHashes.has(scriptHash))
-        openTreasuryIndicies.push(index);
+      else if (openTreasuryV.has(scriptHash)) openTreasuryIndicies.push(index);
     }
 
     const events: Event[] = [];

@@ -60,6 +60,7 @@ const teikiChainIndexer: Indexer = {
     await indexer.staking.start();
     const { intersection } = await indexer.start({
       context: {
+        staking: indexer.staking,
         config: config.pick(
           cc,
           "ALWAYS_FAIL_SCRIPT_HASH",
@@ -69,10 +70,11 @@ const teikiChainIndexer: Indexer = {
           "PROOF_OF_BACKING_MPH",
           "TEIKI_PLANT_NFT_MPH"
         ),
-        dedicatedTreasuryVScriptHashes: new Set(),
-        sharedTreasuryVScriptHashes: new Set(),
-        openTreasuryVScriptHashes: new Set(),
-        staking: indexer.staking,
+        scriptHashes: {
+          dedicatedTreasuryV: new Set(),
+          sharedTreasuryV: new Set(),
+          openTreasuryV: new Set(),
+        },
       },
       begin:
         typeof cc.CHAIN_INDEX_BEGIN === "string"

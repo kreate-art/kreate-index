@@ -1,10 +1,8 @@
-// This module will be imported by handlers/*.ts
-
 import { ScriptHash } from "lucid-cardano";
 
 import { Hex } from "@teiki/protocol/types";
 
-import { StakingController } from "../../types/staking";
+import { StakingIndexer } from "../../framework/chain/staking";
 
 export interface TeikiChainIndexConfig {
   readonly TEIKI_PLANT_NFT_MPH: Hex;
@@ -16,11 +14,13 @@ export interface TeikiChainIndexConfig {
 }
 
 export interface TeikiChainIndexContext {
+  readonly staking: StakingIndexer;
   // Customize this, generally it consists of both immutable (e.g, config)
   // and mutable (e.g, caching) state for effiency.
   readonly config: TeikiChainIndexConfig;
-  dedicatedTreasuryVScriptHashes: Set<ScriptHash>;
-  sharedTreasuryVScriptHashes: Set<ScriptHash>;
-  openTreasuryVScriptHashes: Set<ScriptHash>;
-  staking: StakingController;
+  scriptHashes: {
+    dedicatedTreasuryV: Set<ScriptHash>;
+    sharedTreasuryV: Set<ScriptHash>;
+    openTreasuryV: Set<ScriptHash>;
+  };
 }

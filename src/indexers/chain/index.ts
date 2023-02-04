@@ -6,7 +6,8 @@ import {
   ChainIndexer,
   setupGenesis,
 } from "../../framework/chain";
-import { StakingController, StakingHash } from "../../types/staking";
+import * as staking from "../../framework/chain/staking";
+import { StakingIndexer, StakingHash } from "../../framework/chain/staking";
 
 import * as backing from "./backing";
 import { TeikiChainIndexContext } from "./context";
@@ -14,7 +15,6 @@ import * as deployed_scripts from "./deployed-scripts";
 import * as migration from "./migration";
 import * as project from "./project";
 import * as protocol_params from "./protocol-params";
-import * as staking from "./staking";
 import * as teiki_plant from "./teiki-plant";
 import * as treasury from "./treasury";
 
@@ -47,7 +47,7 @@ const setups: Setup[] = [
 const $ = $handlers<TeikiChainIndexContext>();
 
 export async function getChainIndexer(connections: BaseChainIndexConnections) {
-  const stakingIndexer = staking.createIndexer({
+  const stakingIndexer = staking.createStakingIndexer({
     connections,
     onReloaded: ({ connections: { views } }) => {
       views.refresh("views.project_summary");
@@ -105,7 +105,7 @@ export async function getChainIndexer(connections: BaseChainIndexConnections) {
   });
 }
 
-async function resetStaking(staking: StakingController, sql: Sql) {
+async function resetStaking(staking: StakingIndexer, sql: Sql) {
   staking.reset();
   const rows = await sql<{ hash: StakingHash }[]>`
     SELECT DISTINCT

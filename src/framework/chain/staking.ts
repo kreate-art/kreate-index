@@ -1,24 +1,27 @@
 import { StateQuery } from "@cardano-ogmios/client";
 import { Slot } from "@cardano-ogmios/schema";
-import { PoolId, RewardAddress } from "lucid-cardano";
+import fastq from "fastq";
+import { KeyHash, ScriptHash, PoolId, RewardAddress } from "lucid-cardano";
 import { debounce } from "throttle-debounce";
 
 import { Connections } from "../../connections";
-import { $setup, ErrorHandler, reduceErrorHandler } from "../../framework/base";
-import { $handlers } from "../../framework/chain";
-import { slotFrom } from "../../framework/chain/conversions";
 import { OgmiosContext } from "../../ogmios";
 import { Lovelace } from "../../types/chain";
-import { StakingHash, StakingType } from "../../types/staking";
 import { MaybePromise } from "../../types/typelevel";
+import { $setup, ErrorHandler, queueCatch } from "../base";
 
-import { TeikiChainIndexContext } from "./context";
+import { slotFrom } from "./conversions";
+
+import { $handlers } from ".";
 
 // TODO: This will break if a StakeKey and a StakeScript shares the same blake2b-224
 // However it is fine since we never use StakeKey in Teiki anyways.
 
 const DEFAULT_DEBOUNCE = 250; // 0.25s
 const DEFAULT_INTERVAL = 300_000; // 5 minute
+
+export type StakingHash = KeyHash | ScriptHash;
+export type StakingType = "Key" | "Script";
 
 export type ChainStaking = {
   hash: StakingHash;
@@ -28,12 +31,7 @@ export type ChainStaking = {
   reloadedSlot: Slot;
 };
 
-export type Event = {
-  type: "staking";
-  reload: StakingHash[];
-  remove: StakingHash[];
-};
-const $ = $handlers<TeikiChainIndexContext, Event>();
+export type StakingIndexer = ReturnType<typeof createStakingIndexer>;
 
 export const setup = $setup(async ({ sql }) => {
   // TODO: Index slot if we want to fine-tune rollback later
@@ -50,7 +48,7 @@ export const setup = $setup(async ({ sql }) => {
 
 type VitalConnections = Connections<"sql" | "ogmios" | "lucid" | "views">;
 
-export function createIndexer({
+export function createStakingIndexer({
   connections,
   options,
   onError,
@@ -80,22 +78,18 @@ export function createIndexer({
   let ogmiosContext: OgmiosContext;
   let client: StateQuery.StateQueryClient;
 
-  let debounced: debounce<() => Promise<void>>;
+  let reloadQueue: fastq.queueAsPromised<unknown, void>;
+  let reloadDebounce: debounce<() => Promise<void>>;
   let timer: NodeJS.Timer;
-
-  const errorCallback = reduceErrorHandler(onError, (error) => {
-    stop();
-    throw error;
-  });
 
   function reload(hashes: StakingHash[] | null) {
     if (fullReload) return;
     if (hashes == null) {
       fullReload = true;
-      debounced();
+      reloadDebounce();
     } else {
       for (const hash of hashes) toReload.add(hash);
-      willReloadDynamically && debounced();
+      willReloadDynamically && reloadDebounce();
     }
   }
 
@@ -104,7 +98,9 @@ export function createIndexer({
       console.log("[staking] Stopping...");
       isActive = false;
       clearInterval(timer);
-      debounced.cancel();
+      reloadDebounce.cancel();
+      reloadQueue.killAndDrain();
+      await reloadQueue.drained();
       await ogmiosContext.shutdown(() => client.shutdown());
       console.log("[staking] Stopped!");
     } else {
@@ -118,8 +114,17 @@ export function createIndexer({
       ogmiosContext = await ogmios.create("staking");
       client = await StateQuery.createStateQueryClient(ogmiosContext);
 
-      debounced = debounce(options?.debounce ?? DEFAULT_DEBOUNCE, () =>
-        doReload().catch(errorCallback)
+      reloadQueue = fastq.promise(doReload, 1);
+      queueCatch(reloadQueue, onError, async (error) => {
+        await this.stop();
+        throw error;
+      });
+      reloadDebounce = debounce(
+        options?.debounce ?? DEFAULT_DEBOUNCE,
+        (_: unknown) => {
+          reloadQueue.kill();
+          reloadQueue.push(_);
+        }
       );
       timer = setInterval(
         () => reload(null),
@@ -129,7 +134,6 @@ export function createIndexer({
       isActive = true;
       console.log("[staking] Started!");
 
-      // Multiple instances of this might be run at the same time, but it's completely fine
       async function doReload() {
         if (!isActive) {
           console.warn(
@@ -200,11 +204,14 @@ export function createIndexer({
       }
     },
     stop,
-    reset: function () {
+    reset: async function () {
+      reloadQueue.pause();
+      await reloadQueue.drained();
       registry.clear();
       revRegistry.clear();
       toReload.clear();
       toRemove.clear();
+      reloadQueue.resume();
       console.log(`[staking] Reset!`);
     },
     register: function (hash: StakingHash, type: StakingType) {
@@ -249,6 +256,14 @@ export function createIndexer({
     reload,
   };
 }
+
+export type Event = {
+  type: "staking";
+  reload: StakingHash[];
+  remove: StakingHash[];
+};
+
+const $ = $handlers<{ staking: StakingIndexer }, Event>();
 
 export const filter = $.filter((params) => {
   if (!params.inSync) return null;

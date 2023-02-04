@@ -22,7 +22,7 @@ import {
   WithId,
 } from "../../types/chain";
 import { MaybePromise, NonEmpty } from "../../types/typelevel";
-import { $setup, ErrorHandler, Setup } from "../base";
+import { $setup, ErrorHandler, queueCatch, Setup } from "../base";
 
 import {
   ChainSyncClient,
@@ -195,8 +195,11 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
     connections: BaseChainIndexConnections;
     handlers: ChainIndexHandlers<TContext, TEvent>;
   }): Promise<ChainIndexer<TContext, TEvent>> {
-    const synchronized = fastq.promise((fn) => fn(), 1);
     // Will be filled in by .start()
+    const synchronized = undefined as unknown as fastq.queueAsPromised<
+      () => unknown,
+      unknown
+    >;
     const slotTimeInterpreter = undefined as unknown as SlotTimeInterpreter;
     const self = new ChainIndexer(
       { ...connections, synchronized, slotTimeInterpreter },
@@ -240,7 +243,15 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
     this.status = "starting";
     this.context = context;
     console.log("... Starting");
+    const synchronized = fastq.promise((fn) => fn(), 1);
+    queueCatch(synchronized, onError, async (error) => {
+      await this.stop(true);
+      throw error;
+    });
+
     const connections = this.connections;
+    connections.synchronized = synchronized;
+
     const params = { connections, context };
     for (const initialize of this.handlers.initializers ?? [])
       await initialize(params);
@@ -323,9 +334,9 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
       console.log("... Stopping");
       await this.clients.chainSync.shutdown(immediate);
       const { blockIngestor, connections, context } = this;
+      const { sql, synchronized } = connections;
       const lastBlock = blockIngestor.lastBlock;
       if (lastBlock) {
-        const { sql, synchronized } = connections;
         console.log(`^^ Checkpoint saving...`);
         await synchronized.push(async () => {
           // await sqlDeleteChainBlockAfter(sql, lastBlock.slot);
@@ -340,6 +351,8 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
       } else {
         console.warn("^^ No checkpoint :(");
       }
+      synchronized.killAndDrain();
+      await synchronized.drained();
       console.log("!!! Stopped");
       this.status = "inactive";
     }

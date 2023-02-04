@@ -43,10 +43,8 @@ export const event = $.event(
     connections: { sql },
     event: { index },
     context: {
-      dedicatedTreasuryVScriptHashes,
-      sharedTreasuryVScriptHashes,
-      openTreasuryVScriptHashes,
       staking,
+      scriptHashes: { dedicatedTreasuryV, sharedTreasuryV, openTreasuryV },
     },
   }) => {
     const protocolParams = await driver.store([index], (output) => {
@@ -67,15 +65,11 @@ export const event = $.event(
       );
 
       const registry = protocolParams.registry;
-      dedicatedTreasuryVScriptHashes.add(
+      dedicatedTreasuryV.add(
         registry.dedicatedTreasuryValidator.latest.script.hash
       );
-      sharedTreasuryVScriptHashes.add(
-        registry.sharedTreasuryValidator.latest.script.hash
-      );
-      openTreasuryVScriptHashes.add(
-        registry.openTreasuryValidator.latest.script.hash
-      );
+      sharedTreasuryV.add(registry.sharedTreasuryValidator.latest.script.hash);
+      openTreasuryV.add(registry.openTreasuryValidator.latest.script.hash);
       staking.register(registry.protocolStakingValidator.script.hash, "Script");
 
       return ["protocol-params", { datumJson: protocolParams }];
