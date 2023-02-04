@@ -1,3 +1,4 @@
+import { Sql } from "../../db";
 import { $setup, Setup } from "../../framework/base";
 import {
   $handlers,
@@ -5,7 +6,7 @@ import {
   ChainIndexer,
   setupGenesis,
 } from "../../framework/chain";
-import { StakingHash } from "../../types/staking";
+import { StakingController, StakingHash } from "../../types/staking";
 
 import * as backing from "./backing";
 import { TeikiChainIndexContext } from "./context";
@@ -75,7 +76,7 @@ export async function getChainIndexer(connections: BaseChainIndexConnections) {
         dedicated_treasury: [treasury.dedicatedTreasuryEvent],
         shared_treasury: [treasury.sharedTreasuryEvent],
         open_treasury: [treasury.openTreasuryEvent],
-        staking$reload: [staking.reloadEvent],
+        staking: [staking.event],
         protocol_params: [protocol_params.event],
         deployed_scripts: [deployed_scripts.event],
         migration: [],
@@ -90,29 +91,33 @@ export async function getChainIndexer(connections: BaseChainIndexConnections) {
         }),
       ],
       onceInSync: [
-        async () => {
-          stakingIndexer.toggleReloadDynamically(true);
-          stakingIndexer.reload(null);
+        async ({ connections, context: { staking } }) => {
+          resetStaking(staking, connections.sql);
+          staking.toggleReloadDynamically(true);
+          staking.reload(null);
         },
       ],
     },
   });
   return Object.assign(chainIndexer, {
     staking: stakingIndexer,
-    onceReady: async function () {
-      const rows = await connections.sql<{ hash: StakingHash }[]>`
-        SELECT DISTINCT
-          datum_json -> 'registry' -> 'protocolStakingValidator' -> 'script' ->> 'hash' AS hash
-        FROM
-          chain.protocol_params pp
-        UNION ALL
-        SELECT DISTINCT
-          staking_script_hash AS hash
-        FROM
-          chain.project_script ps
-      `;
-      const hashes = rows.map(({ hash }) => hash);
-      stakingIndexer.batchRegister(hashes, "Script");
-    },
+    onceReady: () => resetStaking(stakingIndexer, connections.sql),
   });
+}
+
+async function resetStaking(staking: StakingController, sql: Sql) {
+  staking.reset();
+  const rows = await sql<{ hash: StakingHash }[]>`
+    SELECT DISTINCT
+      datum_json -> 'registry' -> 'protocolStakingValidator' -> 'script' ->> 'hash' AS hash
+    FROM
+      chain.protocol_params pp
+    UNION ALL
+    SELECT DISTINCT
+      staking_script_hash AS hash
+    FROM
+      chain.project_script ps
+  `;
+  const hashes = rows.map(({ hash }) => hash);
+  staking.batchRegister(hashes, "Script");
 }

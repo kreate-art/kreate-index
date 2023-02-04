@@ -150,7 +150,11 @@ type ChainIndexHandlers<TContext, TEvent extends IEvent> = {
   // Rollback Handlers are ran sequentially
   readonly rollbacks: ChainIndexRollbackHandler<TContext>[];
   // Called once
-  readonly onceInSync?: ((tip: O.Tip) => MaybePromise<void>)[];
+  readonly onceInSync?: ((_: {
+    connections: ChainIndexConnections;
+    context: TContext;
+    tip: O.Tip;
+  }) => MaybePromise<void>)[];
 };
 
 type ChainIndexerStatus = "inactive" | "starting" | "active" | "stopping";
@@ -383,7 +387,8 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
       this.inSync = true;
       blockIngestor.inSync = true;
       console.log(`!! NOW IN SYNC !!`);
-      for (const once of this.handlers.onceInSync ?? []) await once(tip);
+      for (const once of this.handlers.onceInSync ?? [])
+        await once({ connections, context, tip });
     }
 
     const shouldStore = blockIngestor.rollForward(cblock);
