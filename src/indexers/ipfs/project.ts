@@ -143,6 +143,7 @@ export function ipfsProjectContentIndexer(
         INSERT INTO ipfs.project_content ${sql(record)}
           ON CONFLICT DO NOTHING
       `;
+      notifications.notify("ai.project_moderation");
 
       // TODO: Better warnings and stuff
       const logoUrl: string | undefined =
