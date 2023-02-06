@@ -131,6 +131,7 @@ type ChainIndexRollbackHandler<TContext> = (_: {
   connections: ChainIndexConnections;
   context: TContext;
   point: O.PointOrOrigin;
+  action: "begin" | "rollback" | "end";
 }) => MaybePromise<void>;
 
 // Blocks are handled sequentially
@@ -171,6 +172,7 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
   private context!: TContext;
 
   private inSync!: boolean;
+  private isBootstrapped!: boolean;
   private endAt!: O.Slot | undefined;
   private endDelay!: TimeDifference;
 
@@ -260,6 +262,7 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
     this.blockIngestor = createBlockIngestor();
 
     this.inSync = false;
+    this.isBootstrapped = false;
     this.nextBlockGc = 0;
     this.nextChasingBatchFlush = 0;
 
@@ -339,10 +342,14 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
       if (lastBlock) {
         console.log(`^^ Checkpoint saving...`);
         await synchronized.push(async () => {
-          // await sqlDeleteChainBlockAfter(sql, lastBlock.slot);
           // A mini version of rollBackward
           this.blockIngestor.rollBackward(lastBlock);
-          const params = { point: lastBlock, connections, context };
+          const params = {
+            point: lastBlock,
+            connections,
+            context,
+            action: "end" as const,
+          };
           for (const handler of this.handlers.rollbacks) await handler(params);
           await sqlDeleteChainBlockAfter(sql, lastBlock.slot);
           await sqlInsertChainBlock(sql, lastBlock, true);
@@ -495,9 +502,14 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
 
   private async rollBackward(
     { point }: O.RollBackward["RollBackward"],
-    requestNext?: () => void
+    requestNext: () => void
   ) {
-    requestNext && requestNext();
+    requestNext();
+    let action: "begin" | "rollback" = "rollback";
+    if (!this.isBootstrapped) {
+      action = "begin";
+      this.isBootstrapped = true;
+    }
     const connections = this.connections;
     if (point === "origin") {
       await this.reloadSlotTimeInterpreter();
@@ -514,7 +526,7 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
       context,
       handlers: { rollbacks },
     } = this;
-    const params = { point, connections, context };
+    const params = { point, connections, context, action };
     for (const handler of rollbacks) await handler(params);
     await sqlDeleteChainBlockAfter(connections.sql, slotFrom(point));
   }

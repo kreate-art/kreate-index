@@ -211,6 +211,7 @@ export function createStakingIndexer({
       revRegistry.clear();
       toReload.clear();
       toRemove.clear();
+      fullReload = false;
       reloadQueue.resume();
       console.log(`[staking] Reset!`);
     },

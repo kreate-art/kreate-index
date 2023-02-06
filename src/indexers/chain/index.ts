@@ -84,25 +84,29 @@ export async function getChainIndexer(connections: BaseChainIndexConnections) {
       },
       rollbacks: [
         backing.rollback,
-        $.rollback(async ({ connections: { views } }) => {
-          stakingIndexer.reload(null);
-          views.refresh("views.project_custom_url");
-          views.refresh("views.project_summary");
-        }),
+        $.rollback(
+          async ({
+            context: { staking },
+            connections: { sql, views },
+            action,
+          }) => {
+            await resetStaking(staking, sql);
+            action != "begin" && staking.reload(null);
+            views.refresh("views.project_custom_url");
+            views.refresh("views.project_summary");
+          }
+        ),
       ],
       onceInSync: [
-        async ({ connections, context: { staking } }) => {
-          resetStaking(staking, connections.sql);
+        async ({ context: { staking }, connections: { sql } }) => {
+          resetStaking(staking, sql);
           staking.toggleReloadDynamically(true);
           staking.reload(null);
         },
       ],
     },
   });
-  return Object.assign(chainIndexer, {
-    staking: stakingIndexer,
-    onceReady: () => resetStaking(stakingIndexer, connections.sql),
-  });
+  return Object.assign(chainIndexer, { staking: stakingIndexer });
 }
 
 async function resetStaking(staking: StakingIndexer, sql: Sql) {

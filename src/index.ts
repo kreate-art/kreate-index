@@ -89,7 +89,6 @@ const teikiChainIndexer: Indexer = {
             },
     });
     console.log("<> Chain intersection found:", intersection);
-    await indexer.onceReady();
     return async () => {
       await indexer.stop(true);
       await indexer.staking.stop();
