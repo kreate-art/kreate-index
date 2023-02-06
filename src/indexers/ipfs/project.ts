@@ -28,7 +28,8 @@ ipfsProjectContentIndexer.setup = $setup(async ({ sql }) => {
       slogan text,
       custom_url text,
       tags text[],
-      summary text
+      summary text,
+      description jsonb
     )
   `;
   await sql`
@@ -120,6 +121,7 @@ export function ipfsProjectContentIndexer(
         slogan: nullIfFalsy(projectContent?.data?.basics?.slogan),
         tags: nullIfFalsy(projectContent?.data?.basics?.tags),
         summary: nullIfFalsy(projectContent?.data?.basics?.summary),
+        description: nullIfFalsy(projectContent?.data?.description?.body),
       };
 
       if (projectContent.bufs != null) {
@@ -141,6 +143,7 @@ export function ipfsProjectContentIndexer(
         INSERT INTO ipfs.project_content ${sql(record)}
           ON CONFLICT DO NOTHING
       `;
+      notifications.notify("ai.project_moderation");
 
       // TODO: Better warnings and stuff
       const logoUrl: string | undefined =
