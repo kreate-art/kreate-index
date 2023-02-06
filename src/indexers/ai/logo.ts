@@ -51,11 +51,12 @@ export function aiLogoIndexer(
     initialize: async function () {
       const sql = this.connections.sql;
       const fetched = this.context.fetched;
-      await sql<{ etag: string | null }[]>`
+      // TODO: Don't know why .cursor sometimes doesn't work here...
+      const rows = await sql<{ etag: string }[]>`
         SELECT etag FROM ai.logo
-      `.cursor(100, (rows) => {
-        for (const { etag } of rows) etag != null && fetched.add(etag);
-      });
+          WHERE etag IS NOT NULL
+      `;
+      for (const { etag } of rows) fetched.add(etag);
       console.log(`[ai.logo] Already fetched ${fetched.size} S3 objects`);
     },
 
