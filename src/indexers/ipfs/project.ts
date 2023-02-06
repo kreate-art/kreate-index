@@ -27,7 +27,7 @@ ipfsProjectContentIndexer.setup = $setup(async ({ sql }) => {
       title text,
       slogan text,
       custom_url text,
-      tags text[],
+      tags text[] NOT NULL,
       summary text,
       description jsonb
     )
@@ -119,7 +119,7 @@ export function ipfsProjectContentIndexer(
         customUrl: customUrl,
         title: nullIfFalsy(projectContent?.data?.basics?.title),
         slogan: nullIfFalsy(projectContent?.data?.basics?.slogan),
-        tags: nullIfFalsy(projectContent?.data?.basics?.tags),
+        tags: projectContent?.data?.basics?.tags ?? [],
         summary: nullIfFalsy(projectContent?.data?.basics?.summary),
         description: nullIfFalsy(projectContent?.data?.description?.body),
       };

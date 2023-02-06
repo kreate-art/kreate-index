@@ -39,7 +39,7 @@ type Task = {
   id: Cid;
   title: string | null;
   slogan: string | null;
-  tags: string | null;
+  tags: string;
   summary: string | null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   description: any;
