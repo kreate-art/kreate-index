@@ -64,7 +64,7 @@ export function createNotificationsService(
     },
     listen: async function (channel, onNotify, onListen) {
       assert(isActive, `<notifications> Inactive. Ignored Listen: ${channel}`);
-      const index = ++listenerCounter;
+      const index = listenerCounter++;
       console.log(`<notifications> Listen: (${index}) ${channel}`);
       const listener = await sql.listen(channel, onNotify, onListen);
       const unlisten = async () => {
