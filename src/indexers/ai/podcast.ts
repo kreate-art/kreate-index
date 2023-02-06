@@ -151,7 +151,7 @@ export function aiPodcastIndexer(
           console.log(`[ai.podcast] Uploaded: ${id}.wav`);
         }
       } catch (e) {
-        console.error(`[ai.podcast]`, e);
+        console.error(`[ai.podcast] Error ${id}`, e);
         error = e instanceof Error ? e.message : toJson(e);
       }
       if (!error || !willRetry)

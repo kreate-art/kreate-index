@@ -7,6 +7,7 @@ import {
   PollingIndexer,
   VitalConnections,
 } from "../../framework/polling";
+import { objectEntries } from "../../types/typelevel";
 
 export type AiProjectModerationContext = {
   aiServerUrl: string;
@@ -25,23 +26,7 @@ const LABELS = [
   "gun",
 ];
 
-// We might need to add more fields, depends on our moderation scope
-type Task = {
-  id: Cid;
-  title: string;
-  slogan: string;
-  tags: string[];
-  summary: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  description: any;
-};
-
-// Contains sections being moderated
-type Section = Omit<Task, "id" | "tags"> & {
-  tags: string;
-};
-
-const WEIGHTS$SECTION = {
+const WEIGHTS = {
   title: 5,
   slogan: 4,
   summary: 3,
@@ -49,9 +34,23 @@ const WEIGHTS$SECTION = {
   description: 1,
 };
 
+// We might need to add more fields, depends on our moderation scope
+type Task = {
+  id: Cid;
+  title: string | null;
+  slogan: string | null;
+  tags: string | null;
+  summary: string | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  description: any;
+};
+
+// Contains sections being moderated
+type Section = Omit<Task, "id">;
+
 // Moderation result from AI
 type ModerationResult = {
-  tags: Map<string, number> | null;
+  labels: Map<string, number>;
   error: string | null;
 };
 
@@ -96,7 +95,7 @@ export function aiProjectModerationIndexer(
           pc.title as title,
           pc.slogan as slogan,
           pc.summary as summary,
-          pc.tags as tags,
+          array_to_string(pc.tags, ' ') as tags,
           pc.description as description
         FROM
           ipfs.project_content pc
@@ -109,52 +108,40 @@ export function aiProjectModerationIndexer(
       return { tasks, continue: tasks.length >= TASKS_PER_FETCH };
     },
 
-    handle: async function ({
-      id,
-      title,
-      tags,
-      slogan,
-      summary,
-      description,
-    }: Task) {
+    handle: async function ({ id, ...data }: Task) {
       const {
         connections: { sql },
         context: { aiServerUrl },
       } = this;
 
-      let extractedText = "";
+      let description;
       try {
-        extractedText = extractTextFromDescription(description, []).join("\n");
+        description = extractDescriptionTexts(data.description, []).join("\n");
       } catch (error) {
-        console.error("Failed to extract text from description:", id, error);
+        description = "";
+        console.error(
+          `[ai.content_moderation] Failed to extract text from description: ${id}`,
+          error
+        );
       }
-      const res = await callContentModeration(
-        {
-          title,
-          tags: tags.join(" "),
-          slogan,
-          summary,
-          description: extractedText,
-        },
+      const { labels, error } = await callContentModeration(
+        id,
+        { ...data, description },
         aiServerUrl
       );
 
-      if (res.error == null && res.tags != null) {
-        const moderatedTags: Map<string, number> = res.tags;
+      if (error == null) {
         await sql`
           INSERT INTO ai.project_moderation ${sql({
             cid: id,
             error: null,
             ...Object.fromEntries(
-              LABELS.map((label) => [label, moderatedTags.get(label) ?? 0])
+              LABELS.map((label) => [label, labels.get(label) ?? 0])
             ),
           })}
         `;
       } else {
-        console.error(
-          "[ai.project_moderation]",
-          res.error ?? "tags are unexpectedly empty"
-        );
+        // TODO: We will re-enable storing errors later
         // await sql`
         //   INSERT INTO ai.project_moderation ${sql({
         //     id,
@@ -166,47 +153,48 @@ export function aiProjectModerationIndexer(
   });
 }
 
-async function callContentModeration(sections: Section, aiServerUrl: string) {
-  const result: ModerationResult = { tags: new Map(), error: null };
-  for (const [key, value] of Object.entries(sections))
-    try {
-      const weight = WEIGHTS$SECTION[key as keyof typeof WEIGHTS$SECTION];
-
+async function callContentModeration(
+  id: Cid,
+  sections: Section,
+  aiServerUrl: string
+): Promise<ModerationResult> {
+  const labels = new Map<string, number>();
+  let error: string | null = null;
+  try {
+    for (const [key, value] of objectEntries(sections)) {
+      if (!value) continue;
       const res = await fetch(`${aiServerUrl}/ai-content-moderation`, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({ text: value }),
       });
-
       if (res.ok) {
         const data = await res.json();
         if (data == null) throw new Error(`Response invalid: ${toJson(data)}`);
-        data.tags.forEach((tag: string) => {
-          const oldValue = result.tags?.get(tag) ?? 0;
-          result.tags?.set(tag, oldValue + weight);
-        });
+        for (const label of data.tags)
+          labels.set(label, (labels.get(label) ?? 0) + WEIGHTS[key]);
       } else {
-        const error = `Response: ${res.status} - ${
+        error = `Response: ${res.status} - ${
           res.statusText
         }: ${await res.text()}`;
-        result.error = error;
       }
-    } catch (e) {
-      console.error(`[ai.project_moderation]`, e);
-      result.error = e instanceof Error ? e.message : toJson(e);
     }
-  return result;
+    console.log(`[ai.project_moderation] OK: ${id}`);
+  } catch (e) {
+    console.error(`[ai.project_moderation] Error ${id}`, e);
+    error = e instanceof Error ? e.message : toJson(e);
+  }
+  return { labels, error };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function extractTextFromDescription(jsonDescription: any, result: string[]) {
-  if (typeof jsonDescription?.text === "string") {
+function extractDescriptionTexts(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  jsonDescription: any,
+  result: string[]
+): string[] {
+  if (typeof jsonDescription?.text === "string")
     result.push(jsonDescription?.text);
-  }
-  if (Array.isArray(jsonDescription?.content)) {
-    jsonDescription.content.forEach((c: string) => {
-      extractTextFromDescription(c, result);
-    });
-  }
+  if (Array.isArray(jsonDescription?.content))
+    for (const c of jsonDescription.content) extractDescriptionTexts(c, result);
   return result;
 }

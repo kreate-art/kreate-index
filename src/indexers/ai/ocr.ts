@@ -94,7 +94,7 @@ export function aiOcrIndexer(
           } else throw new Error(error);
         }
       } catch (e) {
-        console.error(`[ai.ocr]`, e);
+        console.error(`[ai.ocr] Error ${id}`, e);
       }
     },
   });
