@@ -11,3 +11,11 @@ type Entries<T> = {
 
 export const objectEntries = <T extends object>(obj: T) =>
   Object.entries(obj) as Entries<T>;
+
+export function noop() {
+  // Ignored
+}
+
+export async function noop$async() {
+  // Ignored
+}

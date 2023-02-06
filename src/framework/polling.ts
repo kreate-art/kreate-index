@@ -4,7 +4,7 @@ import { TimeDifference, UnixTime } from "@teiki/protocol/types";
 import { assert } from "@teiki/protocol/utils";
 
 import { Connections } from "../connections";
-import { MaybePromise, NonEmpty } from "../types/typelevel";
+import { MaybePromise, NonEmpty, noop, noop$async } from "../types/typelevel";
 
 import { ErrorHandler, reduceErrorHandler } from "./base";
 
@@ -123,7 +123,7 @@ export function createPollingIndexer<
     const self = { context, connections };
 
     const inQueue: PollingTaskBoard<Task, Id>["inQueue"] = new Map();
-    let taskQueue: PollingTaskBoard<Task, Id>["queue"] | undefined;
+    let taskQueue: PollingTaskBoard<Task, Id>["queue"];
     if (handle) {
       const doHandle = async (task: Task) => {
         const id = task.id;
@@ -140,13 +140,14 @@ export function createPollingIndexer<
       taskQueue = fastq.promise(doHandle, workerConcurrency);
       taskQueue.error(errorCallback);
     } else {
-      taskQueue = undefined;
+      // It's just easier to handle things...
+      taskQueue = fastq.promise(noop$async, 1);
     }
 
     console.log(`[${name}] Starting...`);
 
     if (initialize) {
-      const board = taskQueue ? { queue: taskQueue, inQueue } : undefined;
+      const board = handle ? { queue: taskQueue, inQueue } : undefined;
       await initialize?.call(self, board);
     }
 
@@ -170,7 +171,7 @@ export function createPollingIndexer<
       console.log(`[${name}] Stopping...`);
       clearScheduled();
       pollingQueue.killAndDrain();
-      taskQueue?.killAndDrain();
+      taskQueue.kill(); // We don't want to trigger the continuation here
       await Promise.all(unlistens.map((un) => un()));
       finalize = null;
       console.log(`[${name}] Stopped...`);
@@ -187,11 +188,12 @@ export function createPollingIndexer<
       const inQueueCount = inQueue.size;
       let willContinue = false;
 
-      if (tasksConcurrency && inQueueCount >= tasksConcurrency)
+      if (tasksConcurrency && inQueueCount >= tasksConcurrency) {
         console.warn(
           `[${name}] Queue is overloaded (${inQueueCount}). Try again later.`
         );
-      else {
+        willContinue = true;
+      } else {
         console.log(`[${name}] Fetching at ${now.toISOString()} ~`, trigger);
         const fetched = await fetch.call(self);
         if (!fetched) console.log(`[${name}] Fetcher skips. Move on.`);
@@ -214,7 +216,7 @@ export function createPollingIndexer<
                 : "")
           );
           if (taskCount) {
-            if (taskQueue) {
+            if (handle) {
               for (const task of tasks) {
                 inQueue.set(task.id, false);
                 taskQueue.push(task);
@@ -230,8 +232,14 @@ export function createPollingIndexer<
       }
 
       if (pollingQueue.length()) return;
-      if (willContinue) pollingQueue.push("continue");
-      else {
+      if (willContinue) {
+        if (tasksConcurrency) {
+          console.log(`[${name}] Will continue after all tasks finish.`);
+          taskQueue.drain = () =>
+            pollingQueue.idle() && pollingQueue.push("continue");
+        } else pollingQueue.push("continue");
+      } else {
+        taskQueue.drain = noop;
         // Introduce some jitters
         const jittered = Math.trunc((interval / 2) * (1 + Math.random()));
         const delay = lastExecution + jittered - Date.now();
