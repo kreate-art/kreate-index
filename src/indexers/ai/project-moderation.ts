@@ -32,6 +32,7 @@ const WEIGHTS = {
   summary: 3,
   tags: 2,
   description: 1,
+  announcement: 3,
 };
 
 // We might need to add more fields, depends on our moderation scope
@@ -43,6 +44,8 @@ type Task = {
   summary: string | null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   description: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  announcement: any;
 };
 
 // Contains sections being moderated
@@ -91,17 +94,39 @@ export function aiProjectModerationIndexer(
       const sql = this.connections.sql;
       const tasks = await sql<Task[]>`
         SELECT
-          pc.cid as id,
-          pc.title as title,
-          pc.slogan as slogan,
-          pc.summary as summary,
-          array_to_string(pc.tags, ' ') as tags,
-          pc.description as description
-        FROM
-          ipfs.project_content pc
+          contents.id,
+          contents.title,
+          contents.slogan,
+          contents.summary,
+          contents.tags,
+          contents.description,
+          contents.announcement
+        FROM (
+          SELECT
+            pc.cid as id,
+            pc.title as title,
+            pc.slogan as slogan,
+            pc.summary as summary,
+            array_to_string(pc.tags, ' ') as tags,
+            pc.description as description,
+            null as announcement
+          FROM
+            ipfs.project_content pc
+          UNION
+          SELECT
+            pcu.cid as id,
+            null as title,
+            null as slogan,
+            null as summary,
+            null as tags,
+            null as description,
+            (pcu.data -> 'data') as announcement
+          FROM
+            ipfs.project_community_update pcu
+        ) contents
         LEFT JOIN
           ai.project_moderation pm
-        ON pc.cid = pm.cid
+        ON contents.id = pm.cid
         WHERE pm.cid IS NULL
         LIMIT ${TASKS_PER_FETCH};
       `;
@@ -124,9 +149,28 @@ export function aiProjectModerationIndexer(
           error
         );
       }
+
+      let announcement;
+      try {
+        const _announcement = extractDescriptionTexts(
+          data.announcement?.body,
+          []
+        );
+        _announcement.push(
+          data.announcement?.title ?? "",
+          data.announcement?.summary ?? ""
+        );
+        announcement = _announcement.join("\n");
+      } catch (error) {
+        announcement = "";
+        console.error(
+          `[ai.content_moderation] Failed to extract text from announcement: ${id}`,
+          error
+        );
+      }
       const { labels, error } = await callContentModeration(
         id,
-        { ...data, description },
+        { ...data, description, announcement },
         aiServerUrl
       );
 
@@ -171,8 +215,12 @@ async function callContentModeration(
       if (res.ok) {
         const data = await res.json();
         if (data == null) throw new Error(`Response invalid: ${toJson(data)}`);
-        for (const label of data.tags)
+        for (let label of data.tags) {
+          // REFINE THIS!
+          if (label === "sexual explicit") label = "sexual_explicit";
+          if (label === "identity attack") label = "identity_attack";
           labels.set(label, (labels.get(label) ?? 0) + WEIGHTS[key]);
+        }
       } else {
         error = `Response: ${res.status} - ${
           res.statusText
