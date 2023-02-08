@@ -187,22 +187,38 @@ async function setupProjectSummaryView(sql: Sql) {
       SELECT
         upd.pid,
         b1.time AS created_time,
-        b2.time AS last_announcement_time
+        b2.time AS last_updated_time
       FROM (
         SELECT
           pd.project_id AS pid,
           min(o.created_slot) AS created_slot,
-          max(
-            CASE WHEN pd.last_community_update_cid IS NOT NULL THEN
-              o.created_slot
-            END) AS last_announcement_slot
+          ( SELECT
+              max(created_slot)
+            FROM (
+              SELECT
+                o.created_slot,
+                d.last_community_update_cid AS announcement_cid,
+                LAG(d.last_community_update_cid) OVER (ORDER BY d.id) AS prev_announcement_cid,
+                d.information_cid,
+                LAG(d.information_cid) OVER (ORDER BY d.id) AS prev_information_cid
+              FROM
+                chain.project_detail d
+              INNER JOIN
+                chain.output o ON d.id = o.id
+              WHERE
+                d.project_id = pd.project_id
+            ) AS _a
+            WHERE
+              announcement_cid IS DISTINCT FROM prev_announcement_cid
+              OR information_cid IS DISTINCT FROM prev_information_cid
+          ) AS last_updated_slot
       FROM
         chain.project_detail pd
         INNER JOIN chain.output o ON pd.id = o.id
       GROUP BY
         pd.project_id) upd
       INNER JOIN chain.block b1 ON b1.slot = upd.created_slot
-      LEFT JOIN chain.block b2 ON b2.slot = upd.last_announcement_slot
+      LEFT JOIN chain.block b2 ON b2.slot = upd.last_updated_slot
     ),
     x_backing AS (
       SELECT
@@ -245,7 +261,7 @@ async function setupProjectSummaryView(sql: Sql) {
       x_project.status,
       x_project.owner_address,
       x_project_time.created_time,
-      x_project_time.last_announcement_time,
+      x_project_time.last_updated_time,
       coalesce(x_backing.backer_count, 0) AS backer_count,
       coalesce(x_backing.total_backing_amount, 0) AS total_backing_amount,
       x_funds_w.withdrawn_funds,
