@@ -33,6 +33,8 @@ const WEIGHTS = {
   tags: 2,
   description: 1,
   announcement: 3,
+  roadmap: 2,
+  faq: 2,
 };
 
 // We might need to add more fields, depends on our moderation scope
@@ -46,6 +48,15 @@ type Task = {
   description: any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   announcement: any;
+  roadmap: string | null;
+  faq: string | null;
+};
+
+type TaskProjectInfo = Omit<Task, "announcement">;
+type TaskProjectAnnouncement = {
+  id: Cid;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  announcement: any;
 };
 
 // Contains sections being moderated
@@ -57,7 +68,7 @@ type ModerationResult = {
   error: string | null;
 };
 
-const TASKS_PER_FETCH = 40;
+const TASKS_PER_FETCH = 20;
 
 aiProjectModerationIndexer.setup = $setup(async ({ sql }) => {
   await sql`
@@ -92,16 +103,10 @@ export function aiProjectModerationIndexer(
 
     fetch: async function () {
       const sql = this.connections.sql;
-      const tasks = await sql<Task[]>`
-        SELECT
-          contents.id,
-          contents.title,
-          contents.slogan,
-          contents.summary,
-          contents.tags,
-          contents.description,
-          contents.announcement
-        FROM (
+
+      const tasksProjectInfo = await sql<TaskProjectInfo[]>`
+      SELECT * FROM
+        (
           SELECT
             pc.cid as id,
             pc.title as title,
@@ -109,28 +114,46 @@ export function aiProjectModerationIndexer(
             pc.summary as summary,
             array_to_string(pc.tags, ' ') as tags,
             pc.description as description,
-            null as announcement
+            string_agg(r->>'name', ' ') || ' ' || string_agg(r->>'description', ' ') as roadmap,
+            string_agg(f->>'question', ' ') || ' ' || string_agg(f->>'answer', ' ') as faq
           FROM
-            ipfs.project_content pc
-          UNION
-          SELECT
-            pcu.cid as id,
-            null as title,
-            null as slogan,
-            null as summary,
-            null as tags,
-            null as description,
-            (pcu.data -> 'data') as announcement
-          FROM
-            ipfs.project_community_update pcu
-        ) contents
+            ipfs.project_content pc,
+            jsonb_array_elements(pc.contents -> 'data' -> 'roadmap') r,
+            jsonb_array_elements(pc.contents -> 'data' -> 'community' -> 'frequentlyAskedQuestions') f
+          GROUP BY pc.cid
+        ) pi
         LEFT JOIN
           ai.project_moderation pm
-        ON contents.id = pm.cid
+        ON pi.id = pm.cid
         WHERE pm.cid IS NULL
-        LIMIT ${TASKS_PER_FETCH};
+        LIMIT ${TASKS_PER_FETCH}
       `;
-      return { tasks, continue: tasks.length >= TASKS_PER_FETCH };
+
+      const tasksProjectAnnouncement = await sql<TaskProjectAnnouncement[]>`
+        SELECT
+          pcu.cid as id,
+          (pcu.data -> 'data') as announcement
+        FROM
+          ipfs.project_community_update pcu
+        LEFT JOIN
+          ai.project_moderation pm
+        ON pcu.cid = pm.cid
+        WHERE pm.cid IS NULL
+        LIMIT ${TASKS_PER_FETCH}
+      `;
+
+      let tasks = tasksProjectInfo.map((task) => fromTaskProjectInfo(task));
+      tasks = tasks.concat(
+        tasksProjectAnnouncement.map((task) =>
+          fromTaskProjectAnnouncement(task)
+        )
+      );
+      return {
+        tasks,
+        continue:
+          tasksProjectInfo.length >= TASKS_PER_FETCH ||
+          tasksProjectAnnouncement.length >= TASKS_PER_FETCH,
+      };
     },
 
     handle: async function ({ id, ...data }: Task) {
@@ -216,9 +239,7 @@ async function callContentModeration(
         const data = await res.json();
         if (data == null) throw new Error(`Response invalid: ${toJson(data)}`);
         for (let label of data.tags) {
-          // REFINE THIS!
-          if (label === "sexual explicit") label = "sexual_explicit";
-          if (label === "identity attack") label = "identity_attack";
+          label = label.replace(" ", "_");
           labels.set(label, (labels.get(label) ?? 0) + WEIGHTS[key]);
         }
       } else {
@@ -245,4 +266,24 @@ function extractDescriptionTexts(
   if (Array.isArray(jsonDescription?.content))
     for (const c of jsonDescription.content) extractDescriptionTexts(c, result);
   return result;
+}
+
+function fromTaskProjectInfo(task: TaskProjectInfo): Task {
+  return {
+    ...task,
+    announcement: null,
+  };
+}
+
+function fromTaskProjectAnnouncement(task: TaskProjectAnnouncement): Task {
+  return {
+    ...task,
+    title: null,
+    slogan: null,
+    tags: "",
+    summary: null,
+    description: null,
+    roadmap: null,
+    faq: null,
+  };
 }

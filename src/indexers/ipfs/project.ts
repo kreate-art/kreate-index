@@ -198,7 +198,7 @@ export function ipfsProjectCommunityUpdateIndexer(
 
     handle: async function ({ id }: Task) {
       const {
-        connections: { sql, ipfs },
+        connections: { sql, ipfs, notifications },
         context: { ignored },
       } = this;
       try {
@@ -209,7 +209,7 @@ export function ipfsProjectCommunityUpdateIndexer(
           INSERT INTO ipfs.project_community_update ${sql(record)}
             ON CONFLICT DO NOTHING
         `;
-        this.connections.notifications.notify("ai.project_moderation");
+        notifications.notify("ai.project_moderation");
       } catch (error) {
         console.error("ERROR:", id, error); // TODO: Better log here
         ignored.push(id);
