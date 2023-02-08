@@ -5,8 +5,9 @@ export type NonEmpty<T> = T;
 
 export type MaybePromise<T> = T | Promise<T>;
 
+type NoUndefined<T> = T extends undefined ? never : T;
 type Entries<T> = {
-  [K in keyof T]: [K, T[K]];
+  [P in keyof T]-?: [P, NoUndefined<T[P]>];
 }[keyof T][];
 
 export const objectEntries = <T extends object>(obj: T) =>

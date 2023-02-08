@@ -32,21 +32,34 @@ const WEIGHTS = {
   summary: 3,
   tags: 2,
   description: 1,
+  announcement: 3,
+  roadmap: 2,
+  faq: 2,
 };
 
 // We might need to add more fields, depends on our moderation scope
-type Task = {
-  id: Cid;
-  title: string | null;
-  slogan: string | null;
+type Task<T> = { id: Cid } & T;
+
+// TODO: Proper type
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyBufs = any;
+
+type ProjectInfo = {
+  title: string;
+  slogan: string;
   tags: string;
-  summary: string | null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  description: any;
+  summary: string;
+  description: AnyBufs;
+  roadmap: string;
+  faq: string;
+};
+
+type ProjectAnnouncement = {
+  announcement: AnyBufs;
 };
 
 // Contains sections being moderated
-type Section = Omit<Task, "id">;
+type Sections<T> = { [K in keyof T]: string };
 
 // Moderation result from AI
 type ModerationResult = {
@@ -54,7 +67,7 @@ type ModerationResult = {
   error: string | null;
 };
 
-const TASKS_PER_FETCH = 40;
+const TASKS_PER_FETCH = 20;
 
 aiProjectModerationIndexer.setup = $setup(async ({ sql }) => {
   await sql`
@@ -83,50 +96,102 @@ export function aiProjectModerationIndexer(
     connections,
     triggers: { channels: ["ai.project_moderation"] },
     concurrency: {
-      tasks: TASKS_PER_FETCH,
+      tasks: TASKS_PER_FETCH * 2,
       workers: 1,
     },
 
     fetch: async function () {
       const sql = this.connections.sql;
-      const tasks = await sql<Task[]>`
-        SELECT
-          pc.cid as id,
-          pc.title as title,
-          pc.slogan as slogan,
-          pc.summary as summary,
-          array_to_string(pc.tags, ' ') as tags,
-          pc.description as description
-        FROM
-          ipfs.project_content pc
+
+      const tasksProjectInfo = await sql<Task<ProjectInfo>[]>`
+      SELECT * FROM
+        (
+          SELECT
+            pc.cid as id,
+            pc.title as title,
+            pc.slogan as slogan,
+            pc.summary as summary,
+            array_to_string(pc.tags, ' ') as tags,
+            pc.description as description,
+            string_agg(r->>'name', ' ') || ' ' || string_agg(r->>'description', ' ') as roadmap,
+            string_agg(f->>'question', ' ') || ' ' || string_agg(f->>'answer', ' ') as faq
+          FROM
+            ipfs.project_content pc,
+            jsonb_array_elements(pc.contents -> 'data' -> 'roadmap') r,
+            jsonb_array_elements(pc.contents -> 'data' -> 'community' -> 'frequentlyAskedQuestions') f
+          GROUP BY pc.cid
+        ) pi
         LEFT JOIN
           ai.project_moderation pm
-        ON pc.cid = pm.cid
+        ON pi.id = pm.cid
         WHERE pm.cid IS NULL
-        LIMIT ${TASKS_PER_FETCH};
+        LIMIT ${TASKS_PER_FETCH}
       `;
-      return { tasks, continue: tasks.length >= TASKS_PER_FETCH };
+
+      const tasksProjectAnnouncement = await sql<Task<ProjectAnnouncement>[]>`
+        SELECT
+          pcu.cid as id,
+          (pcu.data -> 'data') as announcement
+        FROM
+          ipfs.project_community_update pcu
+        LEFT JOIN
+          ai.project_moderation pm
+        ON pcu.cid = pm.cid
+        WHERE pm.cid IS NULL
+        LIMIT ${TASKS_PER_FETCH}
+      `;
+
+      return {
+        tasks: [...tasksProjectInfo, ...tasksProjectAnnouncement],
+        continue:
+          tasksProjectInfo.length >= TASKS_PER_FETCH ||
+          tasksProjectAnnouncement.length >= TASKS_PER_FETCH,
+      };
     },
 
-    handle: async function ({ id, ...data }: Task) {
+    handle: async function ({
+      id,
+      ...data
+    }: Task<ProjectInfo | ProjectAnnouncement>) {
       const {
         connections: { sql },
         context: { aiServerUrl },
       } = this;
 
-      let description;
-      try {
-        description = extractDescriptionTexts(data.description, []).join("\n");
-      } catch (error) {
-        description = "";
-        console.error(
-          `[ai.content_moderation] Failed to extract text from description: ${id}`,
-          error
-        );
+      let description = undefined;
+      if ("description" in data) {
+        try {
+          description = extractDescriptionTexts(data.description, []).join(
+            "\n"
+          );
+        } catch (error) {
+          console.error(
+            `[ai.content_moderation] Failed to extract text from description: ${id}`,
+            error
+          );
+        }
       }
+
+      let announcement = undefined;
+      if ("announcement" in data) {
+        try {
+          const _an = data.announcement;
+          announcement = [
+            extractDescriptionTexts(_an?.body, []),
+            _an?.title ?? "",
+            _an?.summary ?? "",
+          ].join("\n");
+        } catch (error) {
+          console.error(
+            `[ai.content_moderation] Failed to extract text from announcement: ${id}`,
+            error
+          );
+        }
+      }
+
       const { labels, error } = await callContentModeration(
         id,
-        { ...data, description },
+        { ...data, description, announcement },
         aiServerUrl
       );
 
@@ -155,7 +220,7 @@ export function aiProjectModerationIndexer(
 
 async function callContentModeration(
   id: Cid,
-  sections: Section,
+  sections: Partial<Sections<ProjectInfo> & Sections<ProjectAnnouncement>>,
   aiServerUrl: string
 ): Promise<ModerationResult> {
   const labels = new Map<string, number>();
@@ -171,8 +236,10 @@ async function callContentModeration(
       if (res.ok) {
         const data = await res.json();
         if (data == null) throw new Error(`Response invalid: ${toJson(data)}`);
-        for (const label of data.tags)
+        for (let label of data.tags) {
+          label = label.replace(" ", "_");
           labels.set(label, (labels.get(label) ?? 0) + WEIGHTS[key]);
+        }
       } else {
         error = `Response: ${res.status} - ${
           res.statusText
