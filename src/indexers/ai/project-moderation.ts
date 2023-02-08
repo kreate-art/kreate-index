@@ -38,29 +38,28 @@ const WEIGHTS = {
 };
 
 // We might need to add more fields, depends on our moderation scope
-type Task = {
-  id: Cid;
-  title: string | null;
-  slogan: string | null;
+type Task<T> = { id: Cid } & T;
+
+// TODO: Proper type
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyBufs = any;
+
+type ProjectInfo = {
+  title: string;
+  slogan: string;
   tags: string;
-  summary: string | null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  description: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  announcement: any;
-  roadmap: string | null;
-  faq: string | null;
+  summary: string;
+  description: AnyBufs;
+  roadmap: string;
+  faq: string;
 };
 
-type TaskProjectInfo = Omit<Task, "announcement">;
-type TaskProjectAnnouncement = {
-  id: Cid;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  announcement: any;
+type ProjectAnnouncement = {
+  announcement: AnyBufs;
 };
 
 // Contains sections being moderated
-type Section = Omit<Task, "id">;
+type Sections<T> = { [K in keyof T]: string };
 
 // Moderation result from AI
 type ModerationResult = {
@@ -97,14 +96,14 @@ export function aiProjectModerationIndexer(
     connections,
     triggers: { channels: ["ai.project_moderation"] },
     concurrency: {
-      tasks: TASKS_PER_FETCH,
+      tasks: TASKS_PER_FETCH * 2,
       workers: 1,
     },
 
     fetch: async function () {
       const sql = this.connections.sql;
 
-      const tasksProjectInfo = await sql<TaskProjectInfo[]>`
+      const tasksProjectInfo = await sql<Task<ProjectInfo>[]>`
       SELECT * FROM
         (
           SELECT
@@ -129,7 +128,7 @@ export function aiProjectModerationIndexer(
         LIMIT ${TASKS_PER_FETCH}
       `;
 
-      const tasksProjectAnnouncement = await sql<TaskProjectAnnouncement[]>`
+      const tasksProjectAnnouncement = await sql<Task<ProjectAnnouncement>[]>`
         SELECT
           pcu.cid as id,
           (pcu.data -> 'data') as announcement
@@ -142,55 +141,54 @@ export function aiProjectModerationIndexer(
         LIMIT ${TASKS_PER_FETCH}
       `;
 
-      let tasks = tasksProjectInfo.map((task) => fromTaskProjectInfo(task));
-      tasks = tasks.concat(
-        tasksProjectAnnouncement.map((task) =>
-          fromTaskProjectAnnouncement(task)
-        )
-      );
       return {
-        tasks,
+        tasks: [...tasksProjectInfo, ...tasksProjectAnnouncement],
         continue:
           tasksProjectInfo.length >= TASKS_PER_FETCH ||
           tasksProjectAnnouncement.length >= TASKS_PER_FETCH,
       };
     },
 
-    handle: async function ({ id, ...data }: Task) {
+    handle: async function ({
+      id,
+      ...data
+    }: Task<ProjectInfo | ProjectAnnouncement>) {
       const {
         connections: { sql },
         context: { aiServerUrl },
       } = this;
 
-      let description;
-      try {
-        description = extractDescriptionTexts(data.description, []).join("\n");
-      } catch (error) {
-        description = "";
-        console.error(
-          `[ai.content_moderation] Failed to extract text from description: ${id}`,
-          error
-        );
+      let description = undefined;
+      if ("description" in data) {
+        try {
+          description = extractDescriptionTexts(data.description, []).join(
+            "\n"
+          );
+        } catch (error) {
+          console.error(
+            `[ai.content_moderation] Failed to extract text from description: ${id}`,
+            error
+          );
+        }
       }
 
-      let announcement;
-      try {
-        const _announcement = extractDescriptionTexts(
-          data.announcement?.body,
-          []
-        );
-        _announcement.push(
-          data.announcement?.title ?? "",
-          data.announcement?.summary ?? ""
-        );
-        announcement = _announcement.join("\n");
-      } catch (error) {
-        announcement = "";
-        console.error(
-          `[ai.content_moderation] Failed to extract text from announcement: ${id}`,
-          error
-        );
+      let announcement = undefined;
+      if ("announcement" in data) {
+        try {
+          const _an = data.announcement;
+          announcement = [
+            extractDescriptionTexts(_an?.body, []),
+            _an?.title ?? "",
+            _an?.summary ?? "",
+          ].join("\n");
+        } catch (error) {
+          console.error(
+            `[ai.content_moderation] Failed to extract text from announcement: ${id}`,
+            error
+          );
+        }
       }
+
       const { labels, error } = await callContentModeration(
         id,
         { ...data, description, announcement },
@@ -222,7 +220,7 @@ export function aiProjectModerationIndexer(
 
 async function callContentModeration(
   id: Cid,
-  sections: Section,
+  sections: Partial<Sections<ProjectInfo> & Sections<ProjectAnnouncement>>,
   aiServerUrl: string
 ): Promise<ModerationResult> {
   const labels = new Map<string, number>();
@@ -266,24 +264,4 @@ function extractDescriptionTexts(
   if (Array.isArray(jsonDescription?.content))
     for (const c of jsonDescription.content) extractDescriptionTexts(c, result);
   return result;
-}
-
-function fromTaskProjectInfo(task: TaskProjectInfo): Task {
-  return {
-    ...task,
-    announcement: null,
-  };
-}
-
-function fromTaskProjectAnnouncement(task: TaskProjectAnnouncement): Task {
-  return {
-    ...task,
-    title: null,
-    slogan: null,
-    tags: "",
-    summary: null,
-    description: null,
-    roadmap: null,
-    faq: null,
-  };
 }
