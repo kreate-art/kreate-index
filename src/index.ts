@@ -12,7 +12,7 @@ import { getChainIndexer } from "./indexers/chain";
 import { discordProjectAlertIndexer } from "./indexers/discord-bot";
 import {
   ipfsProjectCommunityUpdateIndexer,
-  ipfsProjectContentIndexer,
+  ipfsProjectInfoIndexer,
 } from "./indexers/ipfs/project";
 import {
   setupAdminTables,
@@ -121,8 +121,8 @@ function wrapPollingIndexer<Context, Keys extends connections.ConnectionKey[]>(
 
 const AllIndexers = {
   chain: teikiChainIndexer,
-  "ipfs.project_content": wrapPollingIndexer(
-    ipfsProjectContentIndexer,
+  "ipfs.project_info": wrapPollingIndexer(
+    ipfsProjectInfoIndexer,
     ["sql", "ipfs", "notifications", "views"],
     () => ({ ignored: [] })
   ),

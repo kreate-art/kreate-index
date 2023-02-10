@@ -138,11 +138,11 @@ async function setupProjectCustomUrlView(sql: Sql) {
           FROM (
             SELECT
               pd.project_id,
-              pc.custom_url,
+              pi.custom_url,
               o.created_slot
             FROM
               chain.project_detail pd
-              INNER JOIN ipfs.project_content pc ON pd.information_cid = pc.cid
+              INNER JOIN ipfs.project_info pi ON pd.information_cid = pi.cid
               INNER JOIN chain.output o ON pd.id = o.id
               INNER JOIN (
                 SELECT _op.* FROM views.open_project _op
@@ -150,7 +150,7 @@ async function setupProjectCustomUrlView(sql: Sql) {
                 WHERE _o.spent_slot IS NULL AND _op.status NOT IN ('delisted', 'closed')
               ) op ON pd.project_id = op.project_id
             WHERE
-              pc.custom_url IS NOT NULL) t1
+              pi.custom_url IS NOT NULL) t1
           GROUP BY
             t1.project_id, t1.custom_url) t2
           ORDER BY
