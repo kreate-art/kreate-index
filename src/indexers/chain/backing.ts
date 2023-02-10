@@ -22,9 +22,8 @@ export type ChainBacking = {
   milestoneBacked: number;
   backingMessage: string | null;
   unbackingMessage: string | null;
-  // Smart Contract state
-  scBackedAt: UnixTime;
-  scUnbackedAt: UnixTime | null;
+  backedAt: UnixTime;
+  unbackedAt: UnixTime | null;
 };
 
 export type Event = { type: "backing"; indicies: NonEmpty<number[]> | null };
@@ -43,8 +42,8 @@ export const setup = $.setup(async ({ sql }) => {
       milestone_backed smallint NOT NULL,
       backing_message text,
       unbacking_message text,
-      sc_backed_at timestamptz NOT NULL,
-      sc_unbacked_at timestamptz
+      backed_at timestamptz NOT NULL,
+      unbacked_at timestamptz
     )
   `;
   await sql`
@@ -97,14 +96,15 @@ export const event = $.event(
     tx,
     event: { indicies },
   }) => {
-    const unbackingMessage = extractCip20Message(tx)?.join("\n") || null;
-    const scUnbackedAt = slotTimeInterpreter.slotToAbsoluteTime(
+    const txTimeStart = slotTimeInterpreter.slotToAbsoluteTime(
       tx.body.validityInterval.invalidBefore ?? slot
     );
+    const unbackingMessage = extractCip20Message(tx)?.join("\n") || null;
+    // TODO: Bounded unbacked_at?
     const unbackResult = await sql`
       UPDATE chain.backing b
       SET unbacking_message = ${unbackingMessage},
-          sc_unbacked_at = ${scUnbackedAt}
+          unbacked_at = ${txTimeStart}
       FROM chain.output o
       WHERE
         o.id = b.id
@@ -136,7 +136,12 @@ export const event = $.event(
             backingAmount: output.value.lovelace,
             milestoneBacked: Number(backingDatum.milestoneBacked),
             backingMessage,
-            scBackedAt: Number(backingDatum.backedAt.timestamp),
+            // TODO: Remove the `Math.min` part after we do the final migration on testnet
+            // The new contract should already use TxTimeStart instead of TxTimeEnd for backed_at
+            backedAt: Math.min(
+              txTimeStart,
+              Number(backingDatum.backedAt.timestamp)
+            ),
           },
         ];
       });
@@ -151,7 +156,7 @@ export const rollback = $.rollback(
     await sql`
       UPDATE chain.backing b
       SET unbacking_message = NULL,
-          sc_unbacked_at = NULL
+          unbacked_at = NULL
       FROM chain.output o
       WHERE
         o.id = b.id
