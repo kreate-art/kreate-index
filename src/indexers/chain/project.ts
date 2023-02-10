@@ -1,15 +1,16 @@
 import { Address, ScriptHash } from "lucid-cardano";
 
-import { deconstructAddress } from "@teiki/protocol/helpers/schema";
+import {
+  deconstructAddress,
+  parseProjectDatum,
+  parseProjectDetailDatum,
+} from "@teiki/protocol/helpers/schema";
 import * as S from "@teiki/protocol/schema";
 import {
-  ProjectDatum,
-  ProjectDetailDatum,
-  ProjectScriptDatum,
   ProjectStatus,
+  ProjectScriptDatum,
 } from "@teiki/protocol/schema/teiki/project";
 import { Cid, Hex, UnixTime } from "@teiki/protocol/types";
-import { nullIfFalsy } from "@teiki/protocol/utils";
 
 import { PROJECT_AT_TOKEN_NAMES } from "../../constants";
 import { $handlers } from "../../framework/chain";
@@ -34,7 +35,7 @@ export type ChainProject = {
   projectId: Hex;
   ownerAddress: Address;
   status: ProjectStatusLiteral;
-  statusPendingUntil: UnixTime | null;
+  statusTime: UnixTime | null;
   milestoneReached: number;
   isStakingDelegationManagedByProtocol: boolean;
 };
@@ -42,7 +43,8 @@ export type ChainProject = {
 export type ChainProjectDetail = {
   projectId: Hex;
   withdrawnFunds: Lovelace;
-  sponsoredUntil: UnixTime | null;
+  sponsorshipAmount: Lovelace | null;
+  sponsorshipUntil: UnixTime | null;
   informationCid: Cid;
   lastCommunityUpdateCid: Cid | null;
 };
@@ -62,12 +64,23 @@ const $ = $handlers<TeikiChainIndexContext, Event>();
 
 export const setup = $.setup(async ({ sql }) => {
   await sql`
+    DO $$ BEGIN
+      IF to_regtype('chain.project_status') IS NULL THEN
+        CREATE TYPE chain.project_status AS ENUM (${sql.unsafe(
+          Object.values(ProjectStatusMapping)
+            .map((e) => `'${e}'`)
+            .join(", ")
+        )});
+      END IF;
+    END $$
+  `;
+  await sql`
     CREATE TABLE IF NOT EXISTS chain.project (
       id bigint PRIMARY KEY REFERENCES chain.output (id) ON DELETE CASCADE,
       project_id varchar(64) NOT NULL,
       owner_address text NOT NULL,
-      status varchar(12) NOT NULL,
-      status_pending_until timestamptz,
+      status chain.project_status NOT NULL,
+      status_time timestamptz,
       milestone_reached smallint NOT NULL,
       is_staking_delegation_managed_by_protocol boolean NOT NULL
     )
@@ -86,7 +99,8 @@ export const setup = $.setup(async ({ sql }) => {
       id bigint PRIMARY KEY REFERENCES chain.output (id) ON DELETE CASCADE,
       project_id varchar(64) NOT NULL,
       withdrawn_funds bigint NOT NULL,
-      sponsored_until timestamptz,
+      sponsorship_amount bigint,
+      sponsorship_until timestamptz,
       information_cid text NOT NULL,
       last_community_update_cid text
     )
@@ -164,18 +178,25 @@ export const projectEvent = $.event<"project">(
         );
         return undefined;
       }
-      const projectDatum = S.fromData(S.fromCbor(output.datum), ProjectDatum);
+      const res = parseProjectDatum(S.fromCbor(output.datum));
+      const projectDatum = res.project;
       const projectId = projectDatum.projectId.id;
       const status = projectDatum.status;
+      const statusTime =
+        "pendingUntil" in status
+          ? status.pendingUntil
+          : "closedAt" in status
+          ? status.closedAt
+          : "delistedAt" in status
+          ? status.delistedAt
+          : null;
+
       return [
         `project:${projectId}`,
         {
           projectId,
           status: ProjectStatusMapping[status.type],
-          statusPendingUntil:
-            "pendingUntil" in status
-              ? Number(status.pendingUntil.timestamp)
-              : null,
+          statusTime: statusTime ? Number(statusTime.timestamp) : null,
           ownerAddress: deconstructAddress(lucid, projectDatum.ownerAddress),
           milestoneReached: Number(projectDatum.milestoneReached),
           isStakingDelegationManagedByProtocol:
@@ -193,7 +214,12 @@ export const projectEvent = $.event<"project">(
 );
 
 export const projectDetailEvent = $.event<"project_detail">(
-  async ({ driver, connections: { sql }, event: { indicies } }) => {
+  async ({
+    driver,
+    connections: { sql },
+    event: { indicies },
+    context: { projectSponsorshipMinFee },
+  }) => {
     let hasCommunityUpdate = false;
     const projectDetails = await driver.store(indicies, (output) => {
       if (output.datum == null) {
@@ -203,24 +229,40 @@ export const projectDetailEvent = $.event<"project_detail">(
         );
         return undefined;
       }
-      const projectDetailDatum = S.fromData(
-        S.fromCbor(output.datum),
-        ProjectDetailDatum
-      );
+      const res = parseProjectDetailDatum(S.fromCbor(output.datum));
+      const projectDetailDatum = res.projectDetail;
       const projectId = projectDetailDatum.projectId.id;
-      if (projectDetailDatum.lastCommunityUpdateCid) hasCommunityUpdate = true;
+      let sponsorship: {
+        sponsorshipAmount: Lovelace;
+        sponsorshipUntil: UnixTime;
+      } | null = null;
+      if (res.legacy) {
+        const spUntil = res.projectDetail?.sponsoredUntil;
+        if (spUntil)
+          sponsorship = {
+            sponsorshipAmount: projectSponsorshipMinFee,
+            sponsorshipUntil: Number(spUntil.timestamp),
+          };
+      } else {
+        const sp = res.projectDetail.sponsorship;
+        if (sp)
+          sponsorship = {
+            sponsorshipAmount: sp.amount,
+            sponsorshipUntil: Number(sp.until.timestamp),
+          };
+      }
+
+      if (projectDetailDatum.lastAnnouncementCid) hasCommunityUpdate = true;
+
       return [
         `project-detail:${projectId}`,
         {
           projectId,
           withdrawnFunds: projectDetailDatum.withdrawnFunds,
-          sponsoredUntil: nullIfFalsy(
-            Number(projectDetailDatum.sponsoredUntil?.timestamp)
-          ),
           informationCid: projectDetailDatum.informationCid.cid,
-          lastCommunityUpdateCid: nullIfFalsy(
-            projectDetailDatum.lastCommunityUpdateCid?.cid
-          ),
+          lastCommunityUpdateCid:
+            projectDetailDatum.lastAnnouncementCid?.cid ?? null,
+          ...sponsorship,
         },
       ];
     });
