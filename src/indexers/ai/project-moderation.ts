@@ -104,29 +104,29 @@ export function aiProjectModerationIndexer(
       const sql = this.connections.sql;
 
       const tasksProjectInfo = await sql<Task<ProjectInfo>[]>`
-      SELECT * FROM
-        (
-          SELECT
-            pc.cid AS id,
-            pc.title AS title,
-            pc.slogan AS slogan,
-            pc.summary AS summary,
-            array_to_string(pc.tags, ' ') AS tags,
-            pc.description AS description,
-            string_agg(coalesce(r ->> 'name', ''), ' ') || ' ' || string_agg(coalesce(r ->> 'description', ''), ' ') AS roadmap,
-            string_agg(coalesce(f ->> 'question', ''), ' ') || ' ' || string_agg(coalesce(f ->> 'answer', ''), ' ') AS faq
-          FROM
-            ipfs.project_content pc
-            LEFT JOIN LATERAL jsonb_array_elements(pc.contents -> 'data' -> 'roadmap') r ON TRUE
-            LEFT JOIN LATERAL jsonb_array_elements(pc.contents -> 'data' -> 'community' -> 'frequentlyAskedQuestions') f ON TRUE
-          GROUP BY
-            pc.cid
-        ) pi
-        LEFT JOIN
-          ai.project_moderation pm
-        ON pi.id = pm.cid
-        WHERE pm.cid IS NULL
-        LIMIT ${TASKS_PER_FETCH}
+        SELECT * FROM
+          (
+            SELECT
+              pi.cid AS id,
+              pi.title AS title,
+              pi.slogan AS slogan,
+              pi.summary AS summary,
+              array_to_string(pi.tags, ' ') AS tags,
+              pi.description AS description,
+              string_agg(coalesce(r ->> 'name', ''), ' ') || ' ' || string_agg(coalesce(r ->> 'description', ''), ' ') AS roadmap,
+              string_agg(coalesce(f ->> 'question', ''), ' ') || ' ' || string_agg(coalesce(f ->> 'answer', ''), ' ') AS faq
+            FROM
+              ipfs.project_info pi
+              LEFT JOIN LATERAL jsonb_array_elements(pi.contents -> 'data' -> 'roadmap') r ON TRUE
+              LEFT JOIN LATERAL jsonb_array_elements(pi.contents -> 'data' -> 'community' -> 'frequentlyAskedQuestions') f ON TRUE
+            GROUP BY
+              pi.cid
+          ) pj
+          LEFT JOIN
+            ai.project_moderation pm
+          ON pj.id = pm.cid
+          WHERE pm.cid IS NULL
+          LIMIT ${TASKS_PER_FETCH}
       `;
 
       const tasksProjectAnnouncement = await sql<Task<ProjectAnnouncement>[]>`

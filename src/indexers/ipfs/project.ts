@@ -19,9 +19,9 @@ type Task = { id: Cid };
 const TASKS_PER_FETCH = 40;
 const SHA256_BUF_PATTERN = /^sha256:([a-f0-9]{64})$/;
 
-ipfsProjectContentIndexer.setup = $setup(async ({ sql }) => {
+ipfsProjectInfoIndexer.setup = $setup(async ({ sql }) => {
   await sql`
-    CREATE TABLE IF NOT EXISTS ipfs.project_content (
+    CREATE TABLE IF NOT EXISTS ipfs.project_info (
       cid text PRIMARY KEY,
       contents jsonb NOT NULL,
       title text,
@@ -33,8 +33,8 @@ ipfsProjectContentIndexer.setup = $setup(async ({ sql }) => {
     )
   `;
   await sql`
-    CREATE INDEX IF NOT EXISTS project_content_custom_url_index
-      ON ipfs.project_content(custom_url)
+    CREATE INDEX IF NOT EXISTS project_info_custom_url_index
+      ON ipfs.project_info(custom_url)
   `;
 
   await sql`
@@ -63,13 +63,13 @@ ipfsProjectCommunityUpdateIndexer.setup = $setup(async ({ sql }) => {
   `;
 });
 
-export function ipfsProjectContentIndexer(
+export function ipfsProjectInfoIndexer(
   connections: VitalConnections & Connections<"ipfs" | "views">
 ): PollingIndexer<IpfsProjectContext> {
   return createPollingIndexer({
-    name: "ipfs.project_content",
+    name: "ipfs.project_info",
     connections,
-    triggers: { channels: ["ipfs.project_content"] },
+    triggers: { channels: ["ipfs.project_info"] },
 
     fetch: async function () {
       const {
@@ -83,10 +83,10 @@ export function ipfsProjectContentIndexer(
           chain.output out
         INNER JOIN chain.project_detail pd
           ON out.id = pd.id
-        LEFT JOIN ipfs.project_content pc
-          ON pd.information_cid = pc.cid
+        LEFT JOIN ipfs.project_info pi
+          ON pd.information_cid = pi.cid
         WHERE
-          pc.cid IS NULL
+          pi.cid IS NULL
           AND ${sqlNotIn(sql, "pd.information_cid", ignored)}
         LIMIT ${TASKS_PER_FETCH};
       `;
@@ -100,11 +100,11 @@ export function ipfsProjectContentIndexer(
       } = this;
       // TODO: Proper type
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let projectContent: any;
+      let projectInfo: any;
       // TODO: Error handling?
       try {
         // NOTE: This function is copied from teiki-backend/src/indexer/project-info.ts
-        projectContent = fromJson(await fetchFromIpfs(ipfs, id));
+        projectInfo = fromJson(await fetchFromIpfs(ipfs, id));
       } catch (error) {
         // TODO: Better log here
         console.error("ERROR:", id, error);
@@ -112,21 +112,21 @@ export function ipfsProjectContentIndexer(
         return;
       }
 
-      const customUrl = nullIfFalsy(projectContent?.data?.basics?.customUrl);
+      const customUrl = nullIfFalsy(projectInfo?.data?.basics?.customUrl);
       const record = {
         cid: id,
-        contents: projectContent,
+        contents: projectInfo,
         customUrl: customUrl,
-        title: nullIfFalsy(projectContent?.data?.basics?.title),
-        slogan: nullIfFalsy(projectContent?.data?.basics?.slogan),
-        tags: projectContent?.data?.basics?.tags ?? [],
-        summary: nullIfFalsy(projectContent?.data?.basics?.summary),
-        description: nullIfFalsy(projectContent?.data?.description?.body),
+        title: nullIfFalsy(projectInfo?.data?.basics?.title),
+        slogan: nullIfFalsy(projectInfo?.data?.basics?.slogan),
+        tags: projectInfo?.data?.basics?.tags ?? [],
+        summary: nullIfFalsy(projectInfo?.data?.basics?.summary),
+        description: nullIfFalsy(projectInfo?.data?.description?.body),
       };
 
-      if (projectContent.bufs != null) {
+      if (projectInfo.bufs != null) {
         const medias = [];
-        for (const mediaCid of Object.values(projectContent.bufs)) {
+        for (const mediaCid of Object.values(projectInfo.bufs)) {
           if (!mediaCid) continue;
           medias.push({ projectCid: id, mediaCid: mediaCid as string });
         }
@@ -140,18 +140,16 @@ export function ipfsProjectContentIndexer(
       }
 
       await sql`
-        INSERT INTO ipfs.project_content ${sql(record)}
+        INSERT INTO ipfs.project_info ${sql(record)}
           ON CONFLICT DO NOTHING
       `;
       notifications.notify("ai.project_moderation");
 
       // TODO: Better warnings and stuff
       const logoUrl: string | undefined =
-        projectContent?.data?.basics?.logoImage?.url;
+        projectInfo?.data?.basics?.logoImage?.url;
       const logoSha256 = logoUrl?.match(SHA256_BUF_PATTERN)?.[1];
-      const logoCid = logoSha256
-        ? projectContent?.bufs?.[logoSha256]
-        : undefined;
+      const logoCid = logoSha256 ? projectInfo?.bufs?.[logoSha256] : undefined;
       if (logoCid)
         await sql`
           INSERT INTO ipfs.logo_used ${sql({ cid: logoCid })}

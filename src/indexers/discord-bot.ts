@@ -58,15 +58,15 @@ export function discordProjectAlertIndexer(
       const tasks = await sql<Task[]>`
         SELECT DISTINCT
           d.project_id as id,
-          pc.custom_url as custom_url
+          pi.custom_url as custom_url
         FROM
           chain.project_detail d
         LEFT JOIN
           discord.notified_project np
           ON np.project_id = d.project_id
         INNER JOIN
-          ipfs.project_content pc
-          ON d.information_cid = pc.cid
+          ipfs.project_info pi
+          ON d.information_cid = pi.cid
         WHERE
           np.project_id IS NULL
           AND ${sqlNotIn(sql, "d.project_id", ignored)}
