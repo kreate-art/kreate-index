@@ -107,19 +107,20 @@ export function aiProjectModerationIndexer(
       SELECT * FROM
         (
           SELECT
-            pc.cid as id,
-            pc.title as title,
-            pc.slogan as slogan,
-            pc.summary as summary,
-            array_to_string(pc.tags, ' ') as tags,
-            pc.description as description,
-            string_agg(r->>'name', ' ') || ' ' || string_agg(r->>'description', ' ') as roadmap,
-            string_agg(f->>'question', ' ') || ' ' || string_agg(f->>'answer', ' ') as faq
+            pc.cid AS id,
+            pc.title AS title,
+            pc.slogan AS slogan,
+            pc.summary AS summary,
+            array_to_string(pc.tags, ' ') AS tags,
+            pc.description AS description,
+            string_agg(coalesce(r ->> 'name', ''), ' ') || ' ' || string_agg(coalesce(r ->> 'description', ''), ' ') AS roadmap,
+            string_agg(coalesce(f ->> 'question', ''), ' ') || ' ' || string_agg(coalesce(f ->> 'answer', ''), ' ') AS faq
           FROM
-            ipfs.project_content pc,
-            jsonb_array_elements(pc.contents -> 'data' -> 'roadmap') r,
-            jsonb_array_elements(pc.contents -> 'data' -> 'community' -> 'frequentlyAskedQuestions') f
-          GROUP BY pc.cid
+            ipfs.project_content pc
+            LEFT JOIN LATERAL jsonb_array_elements(pc.contents -> 'data' -> 'roadmap') r ON TRUE
+            LEFT JOIN LATERAL jsonb_array_elements(pc.contents -> 'data' -> 'community' -> 'frequentlyAskedQuestions') f ON TRUE
+          GROUP BY
+            pc.cid
         ) pi
         LEFT JOIN
           ai.project_moderation pm
@@ -130,14 +131,13 @@ export function aiProjectModerationIndexer(
 
       const tasksProjectAnnouncement = await sql<Task<ProjectAnnouncement>[]>`
         SELECT
-          pcu.cid as id,
-          (pcu.data -> 'data') as announcement
+          pcu.cid AS id,
+          (pcu.data -> 'data') AS announcement
         FROM
           ipfs.project_community_update pcu
-        LEFT JOIN
-          ai.project_moderation pm
-        ON pcu.cid = pm.cid
-        WHERE pm.cid IS NULL
+          LEFT JOIN ai.project_moderation pm ON pcu.cid = pm.cid
+        WHERE
+          pm.cid IS NULL
         LIMIT ${TASKS_PER_FETCH}
       `;
 
