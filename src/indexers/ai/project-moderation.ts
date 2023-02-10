@@ -131,11 +131,11 @@ export function aiProjectModerationIndexer(
 
       const tasksProjectAnnouncement = await sql<Task<ProjectAnnouncement>[]>`
         SELECT
-          pcu.cid AS id,
-          (pcu.data -> 'data') AS announcement
+          pa.cid AS id,
+          (pa.data -> 'data') AS announcement
         FROM
-          ipfs.project_community_update pcu
-          LEFT JOIN ai.project_moderation pm ON pcu.cid = pm.cid
+          ipfs.project_announcement pa
+          LEFT JOIN ai.project_moderation pm ON pa.cid = pm.cid
         WHERE
           pm.cid IS NULL
         LIMIT ${TASKS_PER_FETCH}

@@ -75,14 +75,14 @@ export function aiPodcastIndexer(
           summary
         FROM (
           SELECT
-            DISTINCT pcu.cid,
+            DISTINCT pa.cid,
             pi.title,
-            NULLIF (pcu.data -> 'data' ->> 'summary', '') AS summary
+            NULLIF (pa.data -> 'data' ->> 'summary', '') AS summary
           FROM
-            ipfs.project_community_update pcu
-          INNER JOIN chain.project_detail pd ON pcu.cid = pd.last_community_update_cid
+            ipfs.project_announcement pa
+          INNER JOIN chain.project_detail pd ON pa.cid = pd.last_announcement_cid
           INNER JOIN ipfs.project_info pi ON pi.cid = pd.information_cid
-          LEFT JOIN ai.podcast pod ON pcu.cid = pod.cid
+          LEFT JOIN ai.podcast pod ON pa.cid = pod.cid
           WHERE
             pod.cid IS NULL) u
         WHERE

@@ -197,8 +197,8 @@ async function setupProjectSummaryView(sql: Sql) {
             FROM (
               SELECT
                 o.created_slot,
-                d.last_community_update_cid AS announcement_cid,
-                LAG(d.last_community_update_cid) OVER (ORDER BY d.id) AS prev_announcement_cid,
+                d.last_announcement_cid AS announcement_cid,
+                LAG(d.last_announcement_cid) OVER (ORDER BY d.id) AS prev_announcement_cid,
                 d.information_cid,
                 LAG(d.information_cid) OVER (ORDER BY d.id) AS prev_information_cid
               FROM

@@ -46,7 +46,7 @@ export type ChainProjectDetail = {
   sponsorshipAmount: Lovelace | null;
   sponsorshipUntil: UnixTime | null;
   informationCid: Cid;
-  lastCommunityUpdateCid: Cid | null;
+  lastAnnouncementCid: Cid | null;
 };
 
 export type ChainProjectScript = {
@@ -102,7 +102,7 @@ export const setup = $.setup(async ({ sql }) => {
       sponsorship_amount bigint,
       sponsorship_until timestamptz,
       information_cid text NOT NULL,
-      last_community_update_cid text
+      last_announcement_cid text
     )
   `;
   await sql`
@@ -220,7 +220,7 @@ export const projectDetailEvent = $.event<"project_detail">(
     event: { indicies },
     context: { projectSponsorshipMinFee },
   }) => {
-    let hasCommunityUpdate = false;
+    let hasAnnouncement = false;
     const projectDetails = await driver.store(indicies, (output) => {
       if (output.datum == null) {
         console.warn(
@@ -252,15 +252,14 @@ export const projectDetailEvent = $.event<"project_detail">(
           };
       }
 
-      if (projectDetailDatum.lastAnnouncementCid) hasCommunityUpdate = true;
-
+      if (projectDetailDatum.lastAnnouncementCid) hasAnnouncement = true;
       return [
         `project-detail:${projectId}`,
         {
           projectId,
           withdrawnFunds: projectDetailDatum.withdrawnFunds,
           informationCid: projectDetailDatum.informationCid.cid,
-          lastCommunityUpdateCid:
+          lastAnnouncementCid:
             projectDetailDatum.lastAnnouncementCid?.cid ?? null,
           ...sponsorship,
         },
@@ -272,7 +271,7 @@ export const projectDetailEvent = $.event<"project_detail">(
     }
     await sql`INSERT INTO chain.project_detail ${sql(projectDetails)}`;
     driver.notify("ipfs.project_info");
-    hasCommunityUpdate && driver.notify("ipfs.project_community_update");
+    hasAnnouncement && driver.notify("ipfs.project_announcement");
     driver.refresh("views.project_summary");
   }
 );
