@@ -21,6 +21,7 @@ const SHA256_BUF_PATTERN = /^sha256:([a-f0-9]{64})$/;
 
 ipfsProjectInfoIndexer.setup = $setup(async ({ sql }) => {
   await sql`
+    -- TODO: Add index for 'custom_url'
     CREATE TABLE IF NOT EXISTS ipfs.project_info (
       cid text PRIMARY KEY,
       contents jsonb NOT NULL,
@@ -53,10 +54,9 @@ ipfsProjectInfoIndexer.setup = $setup(async ({ sql }) => {
   `;
 });
 
-ipfsProjectCommunityUpdateIndexer.setup = $setup(async ({ sql }) => {
+ipfsProjectAnnouncementIndexer.setup = $setup(async ({ sql }) => {
   await sql`
-    -- TODO: Add index for 'custom_url'
-    CREATE TABLE IF NOT EXISTS ipfs.project_community_update (
+    CREATE TABLE IF NOT EXISTS ipfs.project_announcement (
       cid text PRIMARY KEY,
       data jsonb NOT NULL
     )
@@ -163,13 +163,13 @@ export function ipfsProjectInfoIndexer(
   });
 }
 
-export function ipfsProjectCommunityUpdateIndexer(
+export function ipfsProjectAnnouncementIndexer(
   connections: VitalConnections & Connections<"ipfs">
 ): PollingIndexer<IpfsProjectContext> {
   return createPollingIndexer({
-    name: "ipfs.project_community_update",
+    name: "ipfs.project_announcement",
     connections,
-    triggers: { channels: ["ipfs.project_community_update"] },
+    triggers: { channels: ["ipfs.project_announcement"] },
 
     fetch: async function () {
       const {
@@ -178,17 +178,17 @@ export function ipfsProjectCommunityUpdateIndexer(
       } = this;
       const tasks = await sql<Task[]>`
         SELECT DISTINCT
-          pd.last_community_update_cid AS id
+          pd.last_announcement_cid AS id
         FROM
           chain.output out
         INNER JOIN chain.project_detail pd
           ON out.id = pd.id
-        LEFT JOIN ipfs.project_community_update pcu
-          ON pd.last_community_update_cid = pcu.cid
+        LEFT JOIN ipfs.project_announcement pa
+          ON pd.last_announcement_cid = pa.cid
         WHERE
-          pcu.cid IS NULL
-          AND pd.last_community_update_cid IS NOT NULL
-          AND ${sqlNotIn(sql, "pd.last_community_update_cid", ignored)}
+          pa.cid IS NULL
+          AND pd.last_announcement_cid IS NOT NULL
+          AND ${sqlNotIn(sql, "pd.last_announcement_cid", ignored)}
         LIMIT ${TASKS_PER_FETCH};
       `;
       return { tasks, continue: tasks.length >= TASKS_PER_FETCH };
@@ -204,7 +204,7 @@ export function ipfsProjectCommunityUpdateIndexer(
         const record = { cid: id, data };
         // TODO: Error handling?
         await sql`
-          INSERT INTO ipfs.project_community_update ${sql(record)}
+          INSERT INTO ipfs.project_announcement ${sql(record)}
             ON CONFLICT DO NOTHING
         `;
         notifications.notify("ai.project_moderation");

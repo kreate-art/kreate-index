@@ -11,7 +11,7 @@ import { aiProjectModerationIndexer } from "./indexers/ai/project-moderation";
 import { getChainIndexer } from "./indexers/chain";
 import { discordProjectAlertIndexer } from "./indexers/discord-bot";
 import {
-  ipfsProjectCommunityUpdateIndexer,
+  ipfsProjectAnnouncementIndexer,
   ipfsProjectInfoIndexer,
 } from "./indexers/ipfs/project";
 import {
@@ -126,8 +126,8 @@ const AllIndexers = {
     ["sql", "ipfs", "notifications", "views"],
     () => ({ ignored: [] })
   ),
-  "ipfs.project_community_update": wrapPollingIndexer(
-    ipfsProjectCommunityUpdateIndexer,
+  "ipfs.project_announcement": wrapPollingIndexer(
+    ipfsProjectAnnouncementIndexer,
     ["sql", "ipfs", "notifications"],
     () => ({ ignored: [] })
   ),
