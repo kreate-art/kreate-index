@@ -136,7 +136,7 @@ export const event = $.event(
             backingAmount: output.value.lovelace,
             milestoneBacked: Number(backingDatum.milestoneBacked),
             backingMessage,
-            scBackedAt: Number(backingDatum.stakedAt.timestamp),
+            scBackedAt: Number(backingDatum.backedAt.timestamp),
           },
         ];
       });

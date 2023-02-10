@@ -56,13 +56,13 @@ export const initialize = $.initialize(
       scriptHashes: { dedicatedTreasuryV, sharedTreasuryV, openTreasuryV },
     },
   }) => {
-    const results = await sql<
+    const result = await sql<
       { datumJson: ProtocolParamsDatum | LegacyProtocolParamsDatum }[]
     >`
       SELECT datum_json FROM chain.protocol_params
     `;
 
-    for (const row of results) {
+    for (const row of result) {
       const registry = row.datumJson.registry;
       dedicatedTreasuryV.add(
         registry.dedicatedTreasuryValidator.latest.script.hash

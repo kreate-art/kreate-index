@@ -3,6 +3,7 @@ import { ScriptHash } from "lucid-cardano";
 import { Hex } from "@teiki/protocol/types";
 
 import { StakingIndexer } from "../../framework/chain/staking";
+import { Lovelace } from "../../types/chain";
 
 export interface TeikiChainIndexConfig {
   readonly TEIKI_PLANT_NFT_MPH: Hex;
@@ -23,4 +24,5 @@ export interface TeikiChainIndexContext {
     sharedTreasuryV: Set<ScriptHash>;
     openTreasuryV: Set<ScriptHash>;
   };
+  projectSponsorshipMinFee: Lovelace;
 }

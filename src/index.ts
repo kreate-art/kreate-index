@@ -76,6 +76,7 @@ const teikiChainIndexer: Indexer = {
           sharedTreasuryV: new Set(),
           openTreasuryV: new Set(),
         },
+        projectSponsorshipMinFee: 0n,
       },
       begin:
         typeof cc.CHAIN_INDEX_BEGIN === "string"

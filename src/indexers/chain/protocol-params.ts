@@ -1,5 +1,9 @@
 import { parseProtocolParams } from "@teiki/protocol/helpers/schema";
 import * as S from "@teiki/protocol/schema";
+import {
+  LegacyProtocolParamsDatum,
+  ProtocolParamsDatum,
+} from "@teiki/protocol/schema/teiki/protocol";
 import { assert } from "@teiki/protocol/utils";
 
 import { LEGACY } from "../../config";
@@ -21,6 +25,27 @@ export const setup = $.setup(async ({ sql }) => {
   `;
 });
 
+export const initialize = $.initialize(
+  async ({ connections: { sql }, context }) => {
+    const result = await sql<
+      { datumJson: ProtocolParamsDatum | LegacyProtocolParamsDatum }[]
+    >`
+      -- TODO: Only select one of the current protocol
+      SELECT
+        pp.datum_json
+      FROM
+        chain.protocol_params pp
+        INNER JOIN chain.output o ON pp.id = o.id
+      WHERE
+        o.spent_slot IS NULL
+    `;
+    if (result.length) {
+      const row = result[result.length - 1];
+      context.projectSponsorshipMinFee = row.datumJson.projectSponsorshipMinFee;
+    }
+  }
+);
+
 export const filter = $.filter(
   ({
     tx,
@@ -38,15 +63,7 @@ export const filter = $.filter(
 );
 
 export const event = $.event(
-  async ({
-    driver,
-    connections: { sql },
-    event: { index },
-    context: {
-      staking,
-      scriptHashes: { dedicatedTreasuryV, sharedTreasuryV, openTreasuryV },
-    },
-  }) => {
+  async ({ driver, connections: { sql }, event: { index }, context }) => {
     const protocolParams = await driver.store([index], (output) => {
       if (output.datum == null) {
         throw new Error(
@@ -65,12 +82,23 @@ export const event = $.event(
       );
 
       const registry = protocolParams.registry;
-      dedicatedTreasuryV.add(
+      const hashes = context.scriptHashes;
+      hashes.dedicatedTreasuryV.add(
         registry.dedicatedTreasuryValidator.latest.script.hash
       );
-      sharedTreasuryV.add(registry.sharedTreasuryValidator.latest.script.hash);
-      openTreasuryV.add(registry.openTreasuryValidator.latest.script.hash);
-      staking.register(registry.protocolStakingValidator.script.hash, "Script");
+      hashes.sharedTreasuryV.add(
+        registry.sharedTreasuryValidator.latest.script.hash
+      );
+      hashes.openTreasuryV.add(
+        registry.openTreasuryValidator.latest.script.hash
+      );
+
+      context.staking.register(
+        registry.protocolStakingValidator.script.hash,
+        "Script"
+      );
+      context.projectSponsorshipMinFee =
+        protocolParams.projectSponsorshipMinFee;
 
       return ["protocol-params", { datumJson: protocolParams }];
     });
