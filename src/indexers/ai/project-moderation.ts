@@ -117,8 +117,8 @@ export function aiProjectModerationIndexer(
               string_agg(coalesce(f ->> 'question', ''), ' ') || ' ' || string_agg(coalesce(f ->> 'answer', ''), ' ') AS faq
             FROM
               ipfs.project_info pi
-              LEFT JOIN LATERAL jsonb_array_elements(pi.contents -> 'data' -> 'roadmap') r ON TRUE
-              LEFT JOIN LATERAL jsonb_array_elements(pi.contents -> 'data' -> 'community' -> 'frequentlyAskedQuestions') f ON TRUE
+              LEFT JOIN LATERAL jsonb_array_elements(pi.contents #> '{data, roadmap}') r ON TRUE
+              LEFT JOIN LATERAL jsonb_array_elements(pi.contents #> '{data, community, frequentlyAskedQuestions}') f ON TRUE
             GROUP BY
               pi.cid
           ) pj
@@ -236,8 +236,8 @@ async function callContentModeration(
       if (res.ok) {
         const data = await res.json();
         if (data == null) throw new Error(`Response invalid: ${toJson(data)}`);
-        for (let label of data.tags) {
-          label = label.replace(" ", "_");
+        for (const rlabel of data.tags) {
+          const label = rlabel.replace(" ", "_");
           labels.set(label, (labels.get(label) ?? 0) + WEIGHTS[key]);
         }
       } else {

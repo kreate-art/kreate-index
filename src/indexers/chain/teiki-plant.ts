@@ -1,5 +1,3 @@
-import { TEIKI_PLANT_NFT_TOKEN_NAME } from "@teiki/protocol/contracts/common/constants";
-
 import { $handlers } from "../../framework/chain";
 import { prettyOutRef } from "../../framework/chain/conversions";
 
@@ -20,13 +18,11 @@ export const filter = $.filter(
   ({
     tx,
     context: {
-      config: { TEIKI_PLANT_NFT_MPH },
+      config: { authTeikiPlant },
     },
   }) => {
     const index = tx.body.outputs.findIndex(
-      ({ value: { assets } }) =>
-        assets != null &&
-        assets[`${TEIKI_PLANT_NFT_MPH}.${TEIKI_PLANT_NFT_TOKEN_NAME}`] === 1n
+      ({ value: { assets } }) => assets?.[authTeikiPlant] === 1n
     );
     return index >= 0 ? [{ type: "teiki_plant", index }] : null;
   }

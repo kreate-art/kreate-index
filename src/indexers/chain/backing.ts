@@ -1,7 +1,6 @@
 import * as O from "@cardano-ogmios/schema";
 import { Address } from "lucid-cardano";
 
-import { PROOF_OF_BACKING_TOKEN_NAMES } from "@teiki/protocol/contracts/common/constants";
 import { deconstructAddress } from "@teiki/protocol/helpers/schema";
 import * as S from "@teiki/protocol/schema";
 import { BackingDatum } from "@teiki/protocol/schema/teiki/backing";
@@ -60,31 +59,28 @@ export const filter = $.filter(
   ({
     tx,
     context: {
-      config: { PROOF_OF_BACKING_MPH },
+      config: {
+        assetsProofOfBacking: { seed, wilted },
+      },
     },
   }) => {
     const backingIndicies: number[] = [];
-    const seedUnit = `${PROOF_OF_BACKING_MPH}.${PROOF_OF_BACKING_TOKEN_NAMES.SEED}`;
-    const wiltedUnit = `${PROOF_OF_BACKING_MPH}.${PROOF_OF_BACKING_TOKEN_NAMES.WILTED_FLOWER}`;
-
     for (const [index, output] of tx.body.outputs.entries()) {
       const assets = output.value.assets;
-      if (assets != null && assets[seedUnit] === 1n)
+      if (assets && seed.some((a) => assets[a] === 1n))
         backingIndicies.push(index);
     }
-
-    const events: Event[] = [];
     if (backingIndicies.length) {
-      events.push({ type: "backing", indicies: backingIndicies });
+      return [{ type: "backing", indicies: backingIndicies }];
     } else {
-      const mintedAssets = tx.body.mint.assets;
-      if (
-        mintedAssets != null &&
-        (mintedAssets[seedUnit] != null || mintedAssets[wiltedUnit] != null)
-      )
-        events.push({ type: "backing", indicies: null });
+      const minted = tx.body.mint.assets;
+      if (minted) {
+        const isMinted = (a: string) => minted[a];
+        if (seed.some(isMinted) || wilted.some(isMinted))
+          return [{ type: "backing", indicies: null }];
+      }
     }
-    return events;
+    return null;
   }
 );
 

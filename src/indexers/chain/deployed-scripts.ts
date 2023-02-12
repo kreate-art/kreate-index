@@ -11,7 +11,7 @@ export const filter = $.filter(
   ({
     tx,
     context: {
-      config: { ALWAYS_FAIL_SCRIPT_HASH, PROTOCOL_SCRIPT_V_SCRIPT_HASH },
+      config: { deployment },
     },
   }) => {
     const indicies: number[] = [];
@@ -19,11 +19,7 @@ export const filter = $.filter(
       try {
         const scriptHash =
           getAddressDetailsSafe(address)?.paymentCredential?.hash;
-        if (
-          scriptHash === ALWAYS_FAIL_SCRIPT_HASH ||
-          scriptHash === PROTOCOL_SCRIPT_V_SCRIPT_HASH
-        )
-          indicies.push(index);
+        if (scriptHash && deployment.has(scriptHash)) indicies.push(index);
       } catch (e) {
         if (
           !(e instanceof Error) ||

@@ -7,7 +7,6 @@ import {
 import { assert } from "@teiki/protocol/utils";
 
 import { LEGACY } from "../../config";
-import { PROTOCOL_NFT_TOKEN_NAMES } from "../../constants";
 import { $handlers } from "../../framework/chain";
 import { prettyOutRef } from "../../framework/chain/conversions";
 
@@ -30,7 +29,6 @@ export const initialize = $.initialize(
     const result = await sql<
       { datumJson: ProtocolParamsDatum | LegacyProtocolParamsDatum }[]
     >`
-      -- TODO: Only select one of the current protocol
       SELECT
         pp.datum_json
       FROM
@@ -42,6 +40,8 @@ export const initialize = $.initialize(
     if (result.length) {
       const row = result[result.length - 1];
       context.projectSponsorshipMinFee = row.datumJson.projectSponsorshipMinFee;
+    } else {
+      console.warn("No protocol params found");
     }
   }
 );
@@ -50,13 +50,11 @@ export const filter = $.filter(
   ({
     tx,
     context: {
-      config: { PROTOCOL_NFT_MPH },
+      config: { authProtocolParams },
     },
   }) => {
     const index = tx.body.outputs.findIndex(
-      ({ value: { assets } }) =>
-        assets != null &&
-        assets[`${PROTOCOL_NFT_MPH}.${PROTOCOL_NFT_TOKEN_NAMES.PARAMS}`] === 1n
+      ({ value: { assets } }) => assets && assets[authProtocolParams] === 1n
     );
     return index >= 0 ? [{ type: "protocol_params", index }] : null;
   }
@@ -82,20 +80,19 @@ export const event = $.event(
       );
 
       const registry = protocolParams.registry;
-      const hashes = context.scriptHashes;
-      hashes.dedicatedTreasuryV.add(
-        registry.dedicatedTreasuryValidator.latest.script.hash
-      );
-      hashes.sharedTreasuryV.add(
-        registry.sharedTreasuryValidator.latest.script.hash
-      );
-      hashes.openTreasuryV.add(
-        registry.openTreasuryValidator.latest.script.hash
-      );
-
       context.staking.register(
         registry.protocolStakingValidator.script.hash,
         "Script"
+      );
+      const hashes = context.scriptHashes;
+      hashes.dedicatedTreasury.add(
+        registry.dedicatedTreasuryValidator.latest.script.hash
+      );
+      hashes.sharedTreasury.add(
+        registry.sharedTreasuryValidator.latest.script.hash
+      );
+      hashes.openTreasury.add(
+        registry.openTreasuryValidator.latest.script.hash
       );
       context.projectSponsorshipMinFee =
         protocolParams.projectSponsorshipMinFee;

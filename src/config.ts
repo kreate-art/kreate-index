@@ -1,8 +1,13 @@
+import fs from "node:fs";
+
 import { ConnectionConfig } from "@cardano-ogmios/client";
 import * as O from "@cardano-ogmios/schema";
 import dotenv from "dotenv";
+import YAML from "yaml";
 
 import { assert } from "@teiki/protocol/utils";
+
+import { loadConfig } from "./indexers/chain/context";
 
 dotenv.config();
 
@@ -71,18 +76,22 @@ export function discord() {
   };
 }
 
-// TODO: Remove these...
 export function chainIndex() {
+  // TODO: Validate config
+  const rawConfig = YAML.parse(
+    fs.readFileSync(requiredEnv("CHAIN_INDEX_CONFIG"), "utf8")
+  );
+  const config = loadConfig(rawConfig);
+  const bootstrap = config.bootstrap.length ? config.bootstrap[0] : undefined;
+  const begin =
+    parseChainIndexBegin(process.env.CHAIN_INDEX_BEGIN) ?? bootstrap;
+  if (!begin)
+    throw new Error("CHAIN_INDEX_BEGIN or 'bootstrap' in config must be set");
   return {
-    CHAIN_INDEX_BEGIN: parseChainIndexStart(requiredEnv("CHAIN_INDEX_BEGIN")),
+    CHAIN_INDEX_BEGIN: begin,
     CHAIN_INDEX_END: parseChainIndexEnd(process.env.CHAIN_INDEX_END),
     CHAIN_INDEX_END_DELAY: Number(process.env.CHAIN_INDEX_END_DELAY || 0),
-    ALWAYS_FAIL_SCRIPT_HASH: requiredEnv("ALWAYS_FAIL_SCRIPT_HASH"),
-    PROTOCOL_NFT_MPH: requiredEnv("PROTOCOL_NFT_MPH"),
-    PROTOCOL_SCRIPT_V_SCRIPT_HASH: requiredEnv("PROTOCOL_SCRIPT_V_SCRIPT_HASH"),
-    PROJECT_AT_MPH: requiredEnv("PROJECT_AT_MPH"),
-    PROOF_OF_BACKING_MPH: requiredEnv("PROOF_OF_BACKING_MPH"),
-    TEIKI_PLANT_NFT_MPH: requiredEnv("TEIKI_PLANT_NFT_MPH"),
+    CONFIG: config,
   };
 }
 
@@ -107,7 +116,10 @@ export const CHAIN_BLOCK_INGESTION_REPORT_RESOLUTION = Number(
   process.env.CHAIN_BLOCK_INGESTION_RESOLUTION || 60_000 // 1 minute
 );
 
-function parseChainIndexStart(raw: string): "origin" | "tip" | O.Point {
+function parseChainIndexBegin(
+  raw: string | undefined
+): "origin" | "tip" | O.Point | undefined {
+  if (!raw) return undefined;
   if (raw === "origin" || raw === "tip") return raw;
   const [slotStr, hash] = raw.split(":", 2);
   const slot = parseInt(slotStr);

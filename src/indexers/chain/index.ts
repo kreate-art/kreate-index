@@ -113,11 +113,10 @@ async function resetStaking(staking: StakingIndexer, sql: Sql) {
   staking.reset();
   const rows = await sql<{ hash: StakingHash }[]>`
     SELECT DISTINCT
-      datum_json -> 'registry' -> 'protocolStakingValidator' -> 'script' ->> 'hash' AS hash
+      datum_json #>> '{registry, protocolStakingValidator, script, hash}' AS hash
     FROM
       chain.protocol_params pp
-    UNION ALL
-    SELECT DISTINCT
+    UNION ALL SELECT DISTINCT
       staking_script_hash AS hash
     FROM
       chain.project_script ps
