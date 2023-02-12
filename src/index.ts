@@ -62,19 +62,12 @@ const teikiChainIndexer: Indexer = {
     const { intersection } = await indexer.start({
       context: {
         staking: indexer.staking,
-        config: config.pick(
-          cc,
-          "ALWAYS_FAIL_SCRIPT_HASH",
-          "PROTOCOL_NFT_MPH",
-          "PROTOCOL_SCRIPT_V_SCRIPT_HASH",
-          "PROJECT_AT_MPH",
-          "PROOF_OF_BACKING_MPH",
-          "TEIKI_PLANT_NFT_MPH"
-        ),
+        config: cc.CONFIG,
+        protocolVersion: 0,
         scriptHashes: {
-          dedicatedTreasuryV: new Set(),
-          sharedTreasuryV: new Set(),
-          openTreasuryV: new Set(),
+          dedicatedTreasury: new Set(),
+          sharedTreasury: new Set(),
+          openTreasury: new Set(),
         },
         projectSponsorshipMinFee: 0n,
       },

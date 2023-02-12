@@ -25,6 +25,7 @@ ENV NODE_ENV=production
 COPY --from=builder --chown=node:node /app/package*.json ./
 COPY --from=builder --chown=node:node /app/node_modules node_modules
 COPY --from=builder --chown=node:node /app/dist dist
+COPY --chown=node:node config config
 
 ARG COMMIT_SHA
 ENV COMMIT_SHA=$COMMIT_SHA

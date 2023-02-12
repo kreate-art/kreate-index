@@ -77,7 +77,7 @@ export function aiPodcastIndexer(
           SELECT
             DISTINCT pa.cid,
             pi.title,
-            NULLIF (pa.data -> 'data' ->> 'summary', '') AS summary
+            NULLIF (pa.data #>> '{data, summary}', '') AS summary
           FROM
             ipfs.project_announcement pa
           INNER JOIN chain.project_detail pd ON pa.cid = pd.last_announcement_cid

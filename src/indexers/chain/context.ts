@@ -1,28 +1,69 @@
+import * as O from "@cardano-ogmios/schema";
 import { ScriptHash } from "lucid-cardano";
 
-import { Hex } from "@teiki/protocol/types";
+import {
+  PROJECT_AT_TOKEN_NAMES,
+  PROOF_OF_BACKING_TOKEN_NAMES,
+  PROTOCOL_NFT_TOKEN_NAMES,
+  TEIKI_PLANT_NFT_TOKEN_NAME,
+} from "@teiki/protocol/contracts/common/constants";
 
 import { StakingIndexer } from "../../framework/chain/staking";
 import { Lovelace } from "../../types/chain";
 
-export interface TeikiChainIndexConfig {
-  readonly TEIKI_PLANT_NFT_MPH: Hex;
-  readonly ALWAYS_FAIL_SCRIPT_HASH: Hex;
-  readonly PROJECT_AT_MPH: Hex;
-  readonly PROTOCOL_NFT_MPH: Hex;
-  readonly PROOF_OF_BACKING_MPH: Hex;
-  readonly PROTOCOL_SCRIPT_V_SCRIPT_HASH: Hex;
+type TeikiChainIndexYamlConfig = {
+  bootstrap: O.PointOrOrigin[];
+  deployment: ScriptHash[];
+  scripts: {
+    // mpTeiki: ScriptHash; // Unused
+    nftTeikiPlant: ScriptHash;
+    nftProtocol: ScriptHash[];
+    atProject: ScriptHash[];
+    mpProofOfBacking: ScriptHash[];
+  };
+};
+
+export type TeikiChainIndexConfig = ReturnType<typeof loadConfig>;
+
+export function loadConfig(rawConfig: TeikiChainIndexYamlConfig) {
+  const { deployment, scripts, ...config } = rawConfig;
+  return {
+    ...config,
+    deployment: new Set(deployment),
+    authTeikiPlant: `${scripts.nftTeikiPlant}.${TEIKI_PLANT_NFT_TOKEN_NAME}`,
+    authProtocolParams: `${scripts.nftProtocol}.${PROTOCOL_NFT_TOKEN_NAMES.PARAMS}`,
+    authsProject: {
+      project: scripts.atProject.map(
+        (mph) => `${mph}.${PROJECT_AT_TOKEN_NAMES.PROJECT}`
+      ),
+      projectDetail: scripts.atProject.map(
+        (mph) => `${mph}.${PROJECT_AT_TOKEN_NAMES.PROJECT_DETAIL}`
+      ),
+      projectScript: scripts.atProject.map(
+        (mph) => `${mph}.${PROJECT_AT_TOKEN_NAMES.PROJECT_SCRIPT}`
+      ),
+    },
+    assetsProofOfBacking: {
+      seed: scripts.mpProofOfBacking.map(
+        (mph) => `${mph}.${PROOF_OF_BACKING_TOKEN_NAMES.SEED}`
+      ),
+      wilted: scripts.mpProofOfBacking.map(
+        (mph) => `${mph}.${PROOF_OF_BACKING_TOKEN_NAMES.WILTED_FLOWER}`
+      ),
+    },
+  };
 }
 
-export interface TeikiChainIndexContext {
+export type TeikiChainIndexContext = {
   readonly staking: StakingIndexer;
   // Customize this, generally it consists of both immutable (e.g, config)
   // and mutable (e.g, caching) state for effiency.
-  readonly config: TeikiChainIndexConfig;
+  readonly config: Readonly<TeikiChainIndexConfig>;
+  protocolVersion: number;
   scriptHashes: {
-    dedicatedTreasuryV: Set<ScriptHash>;
-    sharedTreasuryV: Set<ScriptHash>;
-    openTreasuryV: Set<ScriptHash>;
+    dedicatedTreasury: Set<ScriptHash>;
+    sharedTreasury: Set<ScriptHash>;
+    openTreasury: Set<ScriptHash>;
   };
   projectSponsorshipMinFee: Lovelace;
-}
+};

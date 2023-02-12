@@ -53,7 +53,7 @@ export const initialize = $.initialize(
   async ({
     connections: { sql },
     context: {
-      scriptHashes: { dedicatedTreasuryV, sharedTreasuryV, openTreasuryV },
+      scriptHashes: { dedicatedTreasury, sharedTreasury, openTreasury },
     },
   }) => {
     const result = await sql<
@@ -64,11 +64,11 @@ export const initialize = $.initialize(
 
     for (const row of result) {
       const registry = row.datumJson.registry;
-      dedicatedTreasuryV.add(
+      dedicatedTreasury.add(
         registry.dedicatedTreasuryValidator.latest.script.hash
       );
-      sharedTreasuryV.add(registry.sharedTreasuryValidator.latest.script.hash);
-      openTreasuryV.add(registry.openTreasuryValidator.latest.script.hash);
+      sharedTreasury.add(registry.sharedTreasuryValidator.latest.script.hash);
+      openTreasury.add(registry.openTreasuryValidator.latest.script.hash);
     }
   }
 );
@@ -77,7 +77,7 @@ export const filter = $.filter(
   ({
     tx,
     context: {
-      scriptHashes: { dedicatedTreasuryV, sharedTreasuryV, openTreasuryV },
+      scriptHashes: { dedicatedTreasury, sharedTreasury, openTreasury },
     },
   }) => {
     const dedicatedTreasuryIndicies: number[] = [];
@@ -89,11 +89,11 @@ export const filter = $.filter(
         getAddressDetailsSafe(address)?.paymentCredential?.hash;
       if (!scriptHash) continue;
 
-      if (dedicatedTreasuryV.has(scriptHash))
+      if (dedicatedTreasury.has(scriptHash))
         dedicatedTreasuryIndicies.push(index);
-      else if (sharedTreasuryV.has(scriptHash))
+      else if (sharedTreasury.has(scriptHash))
         sharedTreasuryIndicies.push(index);
-      else if (openTreasuryV.has(scriptHash)) openTreasuryIndicies.push(index);
+      else if (openTreasury.has(scriptHash)) openTreasuryIndicies.push(index);
     }
 
     const events: Event[] = [];

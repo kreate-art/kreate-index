@@ -7,12 +7,11 @@ import {
 } from "@teiki/protocol/helpers/schema";
 import * as S from "@teiki/protocol/schema";
 import {
-  ProjectStatus,
   ProjectScriptDatum,
+  ProjectStatus,
 } from "@teiki/protocol/schema/teiki/project";
 import { Cid, Hex, UnixTime } from "@teiki/protocol/types";
 
-import { PROJECT_AT_TOKEN_NAMES } from "../../constants";
 import { $handlers } from "../../framework/chain";
 import { prettyOutRef } from "../../framework/chain/conversions";
 import { Lovelace } from "../../types/chain";
@@ -132,26 +131,24 @@ export const filter = $.filter(
   ({
     tx,
     context: {
-      config: { PROJECT_AT_MPH },
+      config: {
+        authsProject: { project, projectDetail, projectScript },
+      },
     },
   }) => {
     const projectIndicies: number[] = [];
     const projectDetailIndicies: number[] = [];
     const projectScriptIndicies: number[] = [];
-    const MPH = `${PROJECT_AT_MPH}.`;
     for (const [index, output] of tx.body.outputs.entries()) {
       const assets = output.value.assets;
       if (assets == null) continue;
+      const isIn = (a: string) => assets[a] === 1n;
       // TODO: Integrity validation: An output should not contain
       // more than one type of the three tokens below
-      if (assets[MPH + PROJECT_AT_TOKEN_NAMES.PROJECT] === 1n)
-        projectIndicies.push(index);
-      else if (assets[MPH + PROJECT_AT_TOKEN_NAMES.PROJECT_DETAIL] === 1n)
-        projectDetailIndicies.push(index);
-      else if (assets[MPH + PROJECT_AT_TOKEN_NAMES.PROJECT_SCRIPT] === 1n)
-        projectScriptIndicies.push(index);
+      if (project.some(isIn)) projectIndicies.push(index);
+      else if (projectDetail.some(isIn)) projectDetailIndicies.push(index);
+      else if (projectScript.some(isIn)) projectScriptIndicies.push(index);
     }
-
     const events: Event[] = [];
     if (projectIndicies.length)
       events.push({ type: "project", indicies: projectIndicies });
@@ -159,10 +156,8 @@ export const filter = $.filter(
       events.push({ type: "project_detail", indicies: projectDetailIndicies });
     if (projectScriptIndicies.length)
       events.push({ type: "project_script", indicies: projectScriptIndicies });
-    if (
-      (tx.body.mint.assets?.[MPH + PROJECT_AT_TOKEN_NAMES.PROJECT_SCRIPT] ??
-        0) < 0
-    )
+    const minted = tx.body.mint.assets;
+    if (minted && projectScript.some((a) => (minted[a] ?? 0) < 0))
       events.push({ type: "project_script$ceased" });
     return events;
   }
@@ -316,8 +311,8 @@ export const projectScriptEvent = $.event<"project_script">(
       console.warn("there is no valid project script");
       return;
     }
-    for (const script of projectScripts)
-      staking.register(script.stakingScriptHash, "Script");
+    for (const { stakingScriptHash } of projectScripts)
+      staking.register(stakingScriptHash, "Script");
     await sql`INSERT INTO chain.project_script ${sql(projectScripts)}`;
   }
 );

@@ -1,0 +1,18 @@
+bootstrap:
+  # 1 block before the actual bootstrap
+  - slot: 7880086
+    hash: 9e6e681cdb28c014484663dfc40a4c2ab5a0d5db330c9646077583703a9effd8
+deployment:
+  # Always Fail
+  - 51936f3c98a04b6609aa9b5c832ba1182cf43a58e534fcc05db09d69
+  # V | Protocol Script
+  - 00d4ec23266f3961a117dffb3d845e2e78f8f75bcb8ce57444c73872
+scripts:
+  mpTeiki: 596f0025dc3204d33feda79f22bd4945d0861671c4cf051c6bf6ff86
+  nftTeikiPlant: aedc1186040e7a026788ce6ebe6ebde07a593adaa74861d6f00855df
+  nftProtocol: 6637245986b10d6cc16a813548e38e899a4896209eec413b65556a6d
+  # For these fields, latest version goes first
+  atProject:
+    - 8e508e18d47c836420c93e590f2f83e3105aebc6d3233a35a8ee12a8
+  mpProofOfBacking:
+    - a4e8bb4bf88ceb0680f8322f282dfe4bcb0f38f6db0bb1700361293e
