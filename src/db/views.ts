@@ -14,6 +14,7 @@ export interface ViewsController {
 export type ViewsControllerOptionsEntry = {
   debounce?: number;
   concurrently?: boolean;
+  dependencies?: string[];
 };
 
 export type ViewsControllerOptions = {
@@ -33,6 +34,19 @@ export function createViewsController(
 
   const refreshes: Record<string, debounce<() => Promise<void>>> = {};
 
+  const depends = new Map<string, string[]>();
+  for (const [view, { dependencies }] of Object.entries(viewsOptions)) {
+    if (!dependencies) continue;
+    for (const parent of dependencies) {
+      let children = depends.get(parent);
+      if (!children) {
+        children = [];
+        depends.set(parent, children);
+      }
+      children.push(view);
+    }
+  }
+
   let isActive = true;
 
   async function doRefreshNormally(view: string) {
@@ -40,8 +54,10 @@ export function createViewsController(
       console.warn(`<views> Inactive. Ignored Refresh: ${view}`);
       return;
     }
-    console.log(`<views> Refresh: ${view}`);
     await sql`REFRESH MATERIALIZED VIEW ${sql(view)}`;
+    console.log(`<views> Refreshed: ${view}`);
+    const children = depends.get(view);
+    if (children) for (const child of children) refresh(child);
   }
 
   async function doRefreshConcurrently(view: string) {
@@ -49,35 +65,43 @@ export function createViewsController(
       console.warn(`<views> Inactive. Ignored Refresh Concurrently: ${view}`);
       return;
     }
-    console.log(`<views> Refresh Concurrently: ${view}`);
     await sql`REFRESH MATERIALIZED VIEW CONCURRENTLY ${sql(view)}`;
+    console.log(`<views> Refreshed Concurrently: ${view}`);
+    const children = depends.get(view);
+    if (children) for (const child of children) refresh(child);
+  }
+
+  function refresh(view: string) {
+    let refresh = refreshes[view];
+    if (!refresh) {
+      const opts = viewsOptions[view];
+      refresh = refreshes[view] = debounce(
+        opts?.debounce ?? defaultDebounce,
+        opts?.concurrently ?? defaultConcurrently
+          ? () => doRefreshConcurrently(view)
+          : () => doRefreshNormally(view)
+      );
+    }
+    refresh();
+  }
+
+  async function refreshImmediately(view: string) {
+    refreshes[view]?.cancel({ upcomingOnly: true });
+    if (viewsOptions[view]?.concurrently ?? defaultConcurrently) {
+      await doRefreshConcurrently(view);
+    } else {
+      await doRefreshNormally(view);
+    }
+  }
+
+  function shutdown() {
+    isActive = false;
+    for (const deb of Object.values(refreshes)) deb.cancel();
   }
 
   return {
-    refresh: function (view) {
-      let refresh = refreshes[view];
-      if (!refresh) {
-        const opts = viewsOptions[view];
-        refresh = refreshes[view] = debounce(
-          opts?.debounce ?? defaultDebounce,
-          opts?.concurrently ?? defaultConcurrently
-            ? () => doRefreshConcurrently(view)
-            : () => doRefreshNormally(view)
-        );
-      }
-      refresh();
-    },
-    refreshImmediately: async function (view) {
-      refreshes[view]?.cancel({ upcomingOnly: true });
-      if (viewsOptions[view]?.concurrently ?? defaultConcurrently) {
-        await doRefreshConcurrently(view);
-      } else {
-        await doRefreshNormally(view);
-      }
-    },
-    shutdown: function () {
-      isActive = false;
-      for (const deb of Object.values(refreshes)) deb.cancel();
-    },
+    refresh,
+    refreshImmediately,
+    shutdown,
   };
 }
