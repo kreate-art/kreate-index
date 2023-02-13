@@ -92,7 +92,9 @@ export function aiLogoIndexer(
       else this.context.fetched.add(etag);
       await sql`
         INSERT INTO ai.logo ${sql({ cid, letter, etag })}
-          ON CONFLICT (cid) DO UPDATE set etag = ${etag}
+        ON CONFLICT (cid)
+          DO UPDATE SET
+            etag = EXCLUDED.etag
       `;
 
       console.log(`[ai.logo] Streamed ${id} => ${cid}`);
