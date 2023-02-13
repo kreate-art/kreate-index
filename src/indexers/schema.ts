@@ -233,10 +233,12 @@ async function setupProjectSummaryView(sql: Sql) {
       GROUP BY
         b.project_id
     ),
-    x_funds_w AS (
+    x_project_detail AS (
       SELECT
         pd.project_id AS pid,
-        pd.withdrawn_funds
+        pd.withdrawn_funds,
+        pd.sponsorship_amount,
+        pd.sponsorship_until
       FROM
         chain.project_detail pd
         INNER JOIN chain.output o ON pd.id = o.id
@@ -264,14 +266,16 @@ async function setupProjectSummaryView(sql: Sql) {
       x_project_time.last_updated_time,
       coalesce(x_backing.backer_count, 0) AS backer_count,
       coalesce(x_backing.total_backing_amount, 0) AS total_backing_amount,
-      x_funds_w.withdrawn_funds,
+      x_project_detail.withdrawn_funds,
+      x_project_detail.sponsorship_amount,
+      x_project_detail.sponsorship_until,
       coalesce(x_funds_a.available_funds, 0) AS available_funds,
-      (x_funds_w.withdrawn_funds + coalesce(x_funds_a.available_funds, 0)) AS total_raised_funds
+      (x_project_detail.withdrawn_funds + coalesce(x_funds_a.available_funds, 0)) AS total_raised_funds
     FROM
       x_project
       LEFT JOIN x_project_time ON x_project.pid = x_project_time.pid
       LEFT JOIN x_backing ON x_project.pid = x_backing.pid
-      LEFT JOIN x_funds_w ON x_project.pid = x_funds_w.pid
+      LEFT JOIN x_project_detail ON x_project.pid = x_project_detail.pid
       LEFT JOIN x_funds_a ON x_project.pid = x_funds_a.pid;
   `;
   await sql`
