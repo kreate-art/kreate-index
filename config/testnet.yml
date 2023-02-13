@@ -14,5 +14,7 @@ scripts:
   # For these fields, latest version goes first
   atProject:
     - 8e508e18d47c836420c93e590f2f83e3105aebc6d3233a35a8ee12a8
+    - c11a766092381b5171a4b7105ce786a6fe441ee677bc1406f8b9886e
   mpProofOfBacking:
     - a4e8bb4bf88ceb0680f8322f282dfe4bcb0f38f6db0bb1700361293e
+    - 0007907ac6615344692b3e00adfcf00e7661523e7f691b8ade997bc1
