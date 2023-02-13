@@ -7,9 +7,27 @@ export { postgres };
 
 export type SqlTypes = Record<string, postgres.PostgresType>;
 
-const POSTGRES_BASE_OPTIONS = {
+const POSTGRES_BASE_OPTIONS: postgres.Options<never> = {
+  connection: {
+    application_name: "teiki/index",
+  },
   // eslint-disable-next-line import/no-named-as-default-member
   transform: postgres.camel,
+  onnotice: (notice) => {
+    if (
+      ("code" in notice && notice.code === "42P06") ||
+      notice.code === "42P07"
+    )
+      // relation/schema ... already exists, skipping
+      notice.message && console.info(`(!) ${notice.message}`);
+    else console.warn(notice);
+  },
+  onparameter: (key, value) => {
+    console.warn(`(:) ${key} = ${value}`);
+  },
+  // onclose: (id) => {
+  //   console.info(`(.) Connection Closed :: ${id}`);
+  // },
 };
 
 const POSTGRES_BASE_TYPES = {
