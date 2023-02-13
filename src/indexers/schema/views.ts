@@ -1,96 +1,13 @@
 import { Hex } from "@teiki/protocol/types";
 
-import { Sql } from "../db";
-import { $setup } from "../framework/base";
-
-export const setupSchemas = $setup(async ({ sql }) => {
-  await sql`CREATE SCHEMA IF NOT EXISTS chain`;
-  await sql`CREATE SCHEMA IF NOT EXISTS ipfs`;
-  await sql`CREATE SCHEMA IF NOT EXISTS discord`;
-  await sql`CREATE SCHEMA IF NOT EXISTS ai`;
-  await sql`CREATE SCHEMA IF NOT EXISTS admin`;
-  await sql`CREATE SCHEMA IF NOT EXISTS views`;
-  // TODO: Remove this `migration` schema later.
-  await sql`CREATE SCHEMA IF NOT EXISTS migration`;
-});
-
-export const setupAdminTables = $setup(async ({ sql }) => {
-  await setupFeaturedProjectTable(sql);
-  await setupBlockedProjectTable(sql);
-});
-
-export const setupMigrationTables = $setup(async ({ sql }) => {
-  await setupProjectMigrationTable(sql);
-});
+import { Sql } from "../../db";
+import { $setup } from "../../framework/base";
 
 export const setupViews = $setup(async ({ sql }) => {
   await setupOpenProjectView(sql);
-  await setupProjectCustomUrlView(sql);
-  await setupProjectSummaryView(sql);
+  await setupProjectCustomUrlMatView(sql);
+  await setupProjectSummaryMatView(sql);
 });
-
-async function setupFeaturedProjectTable(sql: Sql) {
-  await sql`
-    CREATE TABLE IF NOT EXISTS admin.featured_project (
-      project_id varchar(64) PRIMARY KEY
-    )
-  `;
-  await sql`
-    CREATE OR REPLACE FUNCTION featured_project_refresh ()
-      RETURNS TRIGGER
-      LANGUAGE PLPGSQL
-      AS
-    $$
-    BEGIN
-      REFRESH MATERIALIZED VIEW CONCURRENTLY views.project_summary;
-      RETURN NULL;
-    END;
-    $$
-  `;
-  await sql`
-    CREATE OR REPLACE TRIGGER featured_project_refresh_trigger
-      AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE ON admin.featured_project
-      FOR EACH statement
-      EXECUTE FUNCTION featured_project_refresh ()
-  `;
-}
-
-async function setupBlockedProjectTable(sql: Sql) {
-  await sql`
-    CREATE TABLE IF NOT EXISTS admin.blocked_project (
-      project_id text PRIMARY KEY
-    )
-  `;
-  await sql`
-    CREATE OR REPLACE FUNCTION blocked_project_refresh ()
-      RETURNS TRIGGER
-      LANGUAGE PLPGSQL
-      AS
-    $$
-    BEGIN
-      REFRESH MATERIALIZED VIEW CONCURRENTLY views.project_custom_url;
-      REFRESH MATERIALIZED VIEW CONCURRENTLY views.project_summary;
-      RETURN NULL;
-    END;
-    $$
-  `;
-  await sql`
-    CREATE OR REPLACE TRIGGER blocked_project_refresh_trigger
-      AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE ON admin.blocked_project
-      FOR EACH statement
-      EXECUTE FUNCTION blocked_project_refresh ()
-  `;
-}
-
-async function setupProjectMigrationTable(sql: Sql) {
-  await sql`
-    CREATE TABLE IF NOT EXISTS migration.project (
-      id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-      legacy_project_id varchar(64) UNIQUE,
-      project_id varchar(64) UNIQUE
-    )
-  `;
-}
 
 export type ViewProjectCustomUrl = {
   projectId: Hex;
@@ -98,6 +15,7 @@ export type ViewProjectCustomUrl = {
 };
 
 async function setupOpenProjectView(sql: Sql) {
+  // TODO: Drop this view? As it slightly affects query performance.
   await sql`
     CREATE OR REPLACE VIEW views.open_project AS
     SELECT
@@ -115,7 +33,7 @@ async function setupOpenProjectView(sql: Sql) {
   `;
 }
 
-async function setupProjectCustomUrlView(sql: Sql) {
+async function setupProjectCustomUrlMatView(sql: Sql) {
   // TODO: This isn't 100% accurate
   await sql`
     CREATE MATERIALIZED VIEW IF NOT EXISTS views.project_custom_url AS
@@ -168,7 +86,7 @@ async function setupProjectCustomUrlView(sql: Sql) {
   `;
 }
 
-async function setupProjectSummaryView(sql: Sql) {
+async function setupProjectSummaryMatView(sql: Sql) {
   await sql`
     CREATE MATERIALIZED VIEW IF NOT EXISTS views.project_summary AS
     WITH
@@ -180,6 +98,18 @@ async function setupProjectSummaryView(sql: Sql) {
       FROM
         views.open_project p
         INNER JOIN chain.output o ON p.id = o.id
+      WHERE
+        o.spent_slot IS NULL
+    ),
+    x_project_detail AS (
+      SELECT
+        pd.project_id AS pid,
+        pd.withdrawn_funds,
+        pd.sponsorship_amount,
+        pd.sponsorship_until
+      FROM
+        chain.project_detail pd
+        INNER JOIN chain.output o ON pd.id = o.id
       WHERE
         o.spent_slot IS NULL
     ),
@@ -233,19 +163,7 @@ async function setupProjectSummaryView(sql: Sql) {
       GROUP BY
         b.project_id
     ),
-    x_project_detail AS (
-      SELECT
-        pd.project_id AS pid,
-        pd.withdrawn_funds,
-        pd.sponsorship_amount,
-        pd.sponsorship_until
-      FROM
-        chain.project_detail pd
-        INNER JOIN chain.output o ON pd.id = o.id
-      WHERE
-        o.spent_slot IS NULL
-    ),
-    x_funds_a AS (
+    x_staking AS (
       SELECT
         ps.project_id AS pid,
         sum(s.rewards)::bigint AS available_funds
@@ -269,14 +187,14 @@ async function setupProjectSummaryView(sql: Sql) {
       x_project_detail.withdrawn_funds,
       x_project_detail.sponsorship_amount,
       x_project_detail.sponsorship_until,
-      coalesce(x_funds_a.available_funds, 0) AS available_funds,
-      (x_project_detail.withdrawn_funds + coalesce(x_funds_a.available_funds, 0)) AS total_raised_funds
+      coalesce(x_staking.available_funds, 0) AS available_funds,
+      (x_project_detail.withdrawn_funds + coalesce(x_staking.available_funds, 0)) AS total_raised_funds
     FROM
       x_project
+      LEFT JOIN x_project_detail ON x_project.pid = x_project_detail.pid
       LEFT JOIN x_project_time ON x_project.pid = x_project_time.pid
       LEFT JOIN x_backing ON x_project.pid = x_backing.pid
-      LEFT JOIN x_project_detail ON x_project.pid = x_project_detail.pid
-      LEFT JOIN x_funds_a ON x_project.pid = x_funds_a.pid;
+      LEFT JOIN x_staking ON x_project.pid = x_staking.pid;
   `;
   await sql`
     CREATE UNIQUE INDEX IF NOT EXISTS project_summary_pid_index
