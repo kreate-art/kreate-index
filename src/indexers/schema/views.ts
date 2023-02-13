@@ -53,7 +53,7 @@ function createMaterializedView(
         console.warn(`(?) Materialized View "${name}" is oudated. Recreate.`);
       } else {
         console.log(
-          `(?) Materialized View "${name}" does not exist. Create new.`
+          `(?) Materialized View "${name}" does not exist. Create New.`
         );
       }
       await sql.unsafe(definition);
