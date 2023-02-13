@@ -59,3 +59,9 @@ export function options<T extends SqlTypes = Record<string, never>>(
 export type Sql<T extends SqlTypes = typeof POSTGRES_BASE_TYPES> = ReturnType<
   typeof postgres<T>
 >;
+
+export type TransactionSql<T extends SqlTypes = typeof POSTGRES_BASE_TYPES> =
+  Parameters<Parameters<Sql<T>["begin"]>[1]>[0];
+
+export type SqlQuery<T extends readonly postgres.MaybeRow[] = postgres.Row[]> =
+  postgres.PendingQuery<T>;
