@@ -206,6 +206,7 @@ export function aiProjectModerationIndexer(
           })}
         `;
       } else {
+        this.retry();
         // TODO: We will re-enable storing errors later
         // await sql`
         //   INSERT INTO ai.project_moderation ${sql({

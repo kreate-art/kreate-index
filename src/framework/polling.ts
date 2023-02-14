@@ -4,7 +4,7 @@ import { TimeDifference, UnixTime } from "@teiki/protocol/types";
 import { assert } from "@teiki/protocol/utils";
 
 import { Connections } from "../connections";
-import { MaybePromise, NonEmpty, noop, noop$async } from "../types/typelevel";
+import { MaybePromise, NonEmpty, noop$async } from "../types/typelevel";
 
 import { ErrorHandler, reduceErrorHandler } from "./base";
 
@@ -13,13 +13,16 @@ export type VitalConnections = Connections<"sql" | "notifications">;
 type PollingTrigger =
   | "kick-off"
   | "continue"
+  | "retry"
   | { scheduled: TimeDifference }
   | { channel: string };
 
 // TODO: Find a way to expose Task here, so we don't have to pass the TaskBoard to initialize
-export type PollingThis<Context, Connections extends VitalConnections> = {
+type PollingThis<Context, Connections extends VitalConnections> = {
   context: Context;
   connections: Connections;
+  // TODO: Proper retry
+  retry: () => void;
 };
 
 type ITask<Id> = { id: Id };
@@ -55,6 +58,7 @@ type PollingIndexParams<
   triggers: {
     channels?: string[];
     interval?: TimeDifference;
+    retry?: TimeDifference;
   };
   concurrency?: {
     tasks?: number;
@@ -83,6 +87,7 @@ export function createPollingIndexer<
   triggers: {
     channels = [],
     interval = 600_000, // Default to 10 minutes, since we have channels
+    retry: retryDelay = 60_000, // Default to 1 minute
   },
   concurrency,
   onError,
@@ -106,6 +111,9 @@ export function createPollingIndexer<
     let lastExecution: UnixTime = 0;
     let scheduled: NodeJS.Timeout | null = null;
 
+    let willContinue = false;
+    let willRetry = false;
+
     function clearScheduled() {
       if (scheduled) {
         clearTimeout(scheduled);
@@ -120,7 +128,7 @@ export function createPollingIndexer<
     const pollingQueue = fastq.promise(doPoll, 1);
     pollingQueue.error(errorCallback);
 
-    const self = { context, connections };
+    const self = { context, connections, retry: () => (willRetry = true) };
 
     const inQueue: PollingTaskBoard<Task, Id>["inQueue"] = new Map();
     let taskQueue: PollingTaskBoard<Task, Id>["queue"];
@@ -144,6 +152,16 @@ export function createPollingIndexer<
       taskQueue = fastq.promise(noop$async, 1);
     }
 
+    if (tasksConcurrency)
+      taskQueue.drain = () => {
+        if (willContinue) pollingQueue.idle() && poll("continue");
+        else if (willRetry)
+          scheduled = setTimeout(
+            () => pollingQueue.idle() && poll("retry"),
+            retryDelay
+          );
+      };
+
     console.log(`[${name}] Starting...`);
 
     if (initialize) {
@@ -156,10 +174,7 @@ export function createPollingIndexer<
       channels.map(async (channel) =>
         notifications.listen(
           channel,
-          () => {
-            pollingQueue.kill();
-            pollingQueue.push({ channel });
-          },
+          () => poll({ channel }),
           () => console.log(`[${name}] Listening on channel: ${channel}`)
         )
       )
@@ -177,6 +192,11 @@ export function createPollingIndexer<
       console.log(`[${name}] Stopped...`);
     };
 
+    function poll(trigger: PollingTrigger) {
+      pollingQueue.kill();
+      pollingQueue.push(trigger);
+    }
+
     async function doPoll(trigger: PollingTrigger) {
       clearScheduled();
 
@@ -186,14 +206,14 @@ export function createPollingIndexer<
       lastExecution = +now;
 
       const inQueueCount = inQueue.size;
-      let willContinue = false;
 
       if (tasksConcurrency && inQueueCount >= tasksConcurrency) {
+        willContinue = true;
         console.warn(
           `[${name}] Queue is overloaded (${inQueueCount}). Try again later.`
         );
-        willContinue = true;
       } else {
+        if (taskQueue.idle()) willContinue = willRetry = false;
         console.log(`[${name}] Fetching at ${now.toISOString()} ~`, trigger);
         const fetched = await fetch.call(self);
         if (!fetched) console.log(`[${name}] Fetcher skips. Move on.`);
@@ -206,7 +226,7 @@ export function createPollingIndexer<
           } else {
             tasks = fetched.tasks;
           }
-          willContinue = fetched.continue;
+          willContinue ||= fetched.continue;
           const fetchedCount = fetched.tasks.length;
           const taskCount = tasks.length;
           console.log(
@@ -230,16 +250,14 @@ export function createPollingIndexer<
           }
         }
       }
-
-      if (pollingQueue.length()) return;
-      if (willContinue) {
-        if (tasksConcurrency) {
-          console.log(`[${name}] Will continue after all tasks finish.`);
-          taskQueue.drain = () =>
-            pollingQueue.idle() && pollingQueue.push("continue");
-        } else pollingQueue.push("continue");
-      } else {
-        taskQueue.drain = noop;
+      if (!tasksConcurrency && (willContinue || willRetry)) {
+        if (willContinue) poll("continue");
+        else if (willRetry)
+          scheduled = setTimeout(
+            () => pollingQueue.idle() && poll("retry"),
+            retryDelay
+          );
+      } else if (!pollingQueue.length()) {
         // Introduce some jitters
         const jittered = Math.trunc((interval / 2) * (1 + Math.random()));
         const delay = lastExecution + jittered - Date.now();
