@@ -256,7 +256,10 @@ export const projectDetailEvent = $.event<"project_detail">(
           informationCid: projectDetailDatum.informationCid.cid,
           lastAnnouncementCid:
             projectDetailDatum.lastAnnouncementCid?.cid ?? null,
-          ...sponsorship,
+          ...(sponsorship ?? {
+            sponsorshipUntil: null,
+            sponsorshipAmount: null,
+          }),
         },
       ];
     });
