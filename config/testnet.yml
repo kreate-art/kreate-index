@@ -18,3 +18,11 @@ scripts:
   mpProofOfBacking:
     - a4e8bb4bf88ceb0680f8322f282dfe4bcb0f38f6db0bb1700361293e
     - 0007907ac6615344692b3e00adfcf00e7661523e7f691b8ade997bc1
+  vDedicatedTreasury:
+    - c0cbab0a99f0da298dc26c4c372600b2ca3eafe187d5bb50ad81af7d
+    - dc009cd7319860a3655189440d04d2e1e437197f40aeaf94db5c2016
+  vSharedTreasury:
+    - 7f3f52263e50878680b811a12e679f343208176df27e849e02eedec4
+    - bb3b1a930ae06764c57c612baf2d2b24e6cb9f2bb2d88eeb5b321c38
+  vOpenTreasury:
+    - aaf51d7125f3c0cf701c0d5cbdb431af8a52c70290692891cb4bcc19

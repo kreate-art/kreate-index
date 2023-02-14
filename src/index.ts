@@ -59,15 +59,17 @@ const teikiChainIndexer: Indexer = {
       )
     );
     await indexer.staking.start();
+    const iConfig = cc.CONFIG;
     const { intersection } = await indexer.start({
       context: {
         staking: indexer.staking,
-        config: cc.CONFIG,
+        config: iConfig,
         protocolVersion: 0,
+        // TODO: Reuse config.hashesTreasury directly
         scriptHashes: {
-          dedicatedTreasury: new Set(),
-          sharedTreasury: new Set(),
-          openTreasury: new Set(),
+          dedicatedTreasury: new Set(iConfig.hashesTreasury.dedicated),
+          sharedTreasury: new Set(iConfig.hashesTreasury.shared),
+          openTreasury: new Set(iConfig.hashesTreasury.open),
         },
         projectSponsorshipMinFee: 0n,
       },

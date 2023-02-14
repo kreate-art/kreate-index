@@ -20,6 +20,9 @@ type TeikiChainIndexYamlConfig = {
     nftProtocol: ScriptHash[];
     atProject: ScriptHash[];
     mpProofOfBacking: ScriptHash[];
+    vDedicatedTreasury: ScriptHash[];
+    vSharedTreasury: ScriptHash[];
+    vOpenTreasury: ScriptHash[];
   };
 };
 
@@ -50,6 +53,11 @@ export function loadConfig(rawConfig: TeikiChainIndexYamlConfig) {
       wilted: scripts.mpProofOfBacking.map(
         (mph) => `${mph}.${PROOF_OF_BACKING_TOKEN_NAMES.WILTED_FLOWER}`
       ),
+    },
+    hashesTreasury: {
+      dedicated: scripts.vDedicatedTreasury,
+      shared: scripts.vSharedTreasury,
+      open: scripts.vOpenTreasury,
     },
   };
 }
