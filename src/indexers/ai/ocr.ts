@@ -84,6 +84,7 @@ export function aiOcrIndexer(
             res.statusText
           }: ${await res.text()}`;
           if (res.status >= 400 && res.status < 500) {
+            console.error(`[ai.ocr] Error ${id}`, error);
             await sql`
               INSERT INTO ai.ocr ${sql({
                 mediaCid: id,
@@ -95,6 +96,7 @@ export function aiOcrIndexer(
         }
       } catch (e) {
         console.error(`[ai.ocr] Error ${id}`, e);
+        this.retry();
       }
     },
   });

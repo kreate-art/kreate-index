@@ -154,8 +154,12 @@ export function aiPodcastIndexer(
         console.error(`[ai.podcast] Error ${id}`, e);
         error = e instanceof Error ? e.message : toJson(e);
       }
-      if (!error || !willRetry)
+      if (error) {
+        if (willRetry) this.retry();
         await sql`INSERT INTO ai.podcast ${sql({ cid: id, error })}`;
+      } else {
+        await sql`INSERT INTO ai.podcast ${sql({ cid: id, error: null })}`;
+      }
     },
   });
 }
