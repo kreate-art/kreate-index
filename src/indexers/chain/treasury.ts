@@ -146,11 +146,10 @@ export const dedicatedTreasuryEvent = $.event<"dedicated_treasury">(
       ];
     });
 
-    if (!dedicatedTreasuries) {
+    if (!dedicatedTreasuries.length) {
       console.warn("there is no valid dedicated treasury");
       return;
     }
-
     await sql`INSERT INTO chain.dedicated_treasury ${sql(dedicatedTreasuries)}`;
   }
 );
@@ -187,11 +186,10 @@ export const sharedTreasuryEvent = $.event<"shared_treasury">(
       ];
     });
 
-    if (!sharedTreasuries) {
+    if (!sharedTreasuries.length) {
       console.warn("there is no valid shared treasury");
       return;
     }
-
     await sql`INSERT INTO chain.shared_treasury ${sql(sharedTreasuries)}`;
   }
 );
@@ -217,11 +215,10 @@ export const openTreasuryEvent = $.event<"open_treasury">(
       return ["open-treasury", { governorAda, totalAda }];
     });
 
-    if (!openTreasuries) {
+    if (!openTreasuries.length) {
       console.warn("there is no valid open treasury");
       return;
     }
-
     await sql`INSERT INTO chain.open_treasury ${sql(openTreasuries)}`;
   }
 );

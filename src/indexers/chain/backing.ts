@@ -141,7 +141,8 @@ export const event = $.event(
           },
         ];
       });
-      await sql`INSERT INTO chain.backing ${sql(backings)}`;
+      if (!backings.length) console.warn("there is no valid backing");
+      else await sql`INSERT INTO chain.backing ${sql(backings)}`;
     }
     driver.refresh("views.project_summary");
   }
