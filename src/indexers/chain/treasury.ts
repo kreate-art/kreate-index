@@ -6,6 +6,7 @@ import {
 } from "@teiki/protocol/schema/teiki/protocol";
 import {
   DedicatedTreasuryDatum,
+  OpenTreasuryDatum,
   SharedTreasuryDatum,
 } from "@teiki/protocol/schema/teiki/treasury";
 import { Hex } from "@teiki/protocol/types";
@@ -31,20 +32,26 @@ export const setup = $.setup(async ({ sql }) => {
   await sql`
     CREATE TABLE IF NOT EXISTS chain.dedicated_treasury (
       id bigint PRIMARY KEY REFERENCES chain.output (id) ON DELETE CASCADE,
-      project_id varchar(64) NOT NULL
+      project_id varchar(64) NOT NULL,
+      governor_ada bigint NOT NULL,
+      total_ada bigint NOT NULL
     )
   `;
 
   await sql`
     CREATE TABLE IF NOT EXISTS chain.shared_treasury (
       id bigint PRIMARY KEY REFERENCES chain.output (id) ON DELETE CASCADE,
-      project_id varchar(64) NOT NULL
+      project_id varchar(64) NOT NULL,
+      governor_teiki bigint NOT NULL,
+      total_teiki bigint NOT NULL
     )
   `;
 
   await sql`
     CREATE TABLE IF NOT EXISTS chain.open_treasury (
-      id bigint PRIMARY KEY REFERENCES chain.output (id) ON DELETE CASCADE
+      id bigint PRIMARY KEY REFERENCES chain.output (id) ON DELETE CASCADE,
+      governor_ada bigint NOT NULL,
+      total_ada bigint NOT NULL
     )
   `;
 });
@@ -130,8 +137,13 @@ export const dedicatedTreasuryEvent = $.event<"dedicated_treasury">(
         DedicatedTreasuryDatum
       );
       const projectId = dedicatedTreasururyDatum.projectId.id;
+      const governorAda = dedicatedTreasururyDatum.governorAda;
+      const totalAda = output.value.lovelace;
 
-      return [`dedicated-treasury:${projectId}`, { projectId }];
+      return [
+        `dedicated-treasury:${projectId}`,
+        { projectId, governorAda, totalAda },
+      ];
     });
 
     if (!dedicatedTreasuries) {
@@ -144,7 +156,14 @@ export const dedicatedTreasuryEvent = $.event<"dedicated_treasury">(
 );
 
 export const sharedTreasuryEvent = $.event<"shared_treasury">(
-  async ({ driver, connections: { sql }, event: { indicies } }) => {
+  async ({
+    driver,
+    connections: { sql },
+    event: { indicies },
+    context: {
+      config: { assetTeiki },
+    },
+  }) => {
     const sharedTreasuries = await driver.store(indicies, (output) => {
       if (output.datum == null) {
         console.warn(
@@ -159,8 +178,13 @@ export const sharedTreasuryEvent = $.event<"shared_treasury">(
         SharedTreasuryDatum
       );
       const projectId = sharedTreasuryDatum.projectId.id;
+      const governorTeiki = sharedTreasuryDatum.governorTeiki;
+      const totalTeiki = output.value[assetTeiki.replace(".", "")] ?? 0n;
 
-      return [`shared-treasury:${projectId}`, { projectId }];
+      return [
+        `shared-treasury:${projectId}`,
+        { projectId, governorTeiki, totalTeiki },
+      ];
     });
 
     if (!sharedTreasuries) {
@@ -183,7 +207,14 @@ export const openTreasuryEvent = $.event<"open_treasury">(
         return undefined;
       }
 
-      return ["open-treasury", {}];
+      const openTreasuryDatum = S.fromData(
+        S.fromCbor(output.datum),
+        OpenTreasuryDatum
+      );
+      const governorAda = openTreasuryDatum.governorAda;
+      const totalAda = output.value.lovelace;
+
+      return ["open-treasury", { governorAda, totalAda }];
     });
 
     if (!openTreasuries) {
