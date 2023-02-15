@@ -6,6 +6,7 @@ import {
   PROOF_OF_BACKING_TOKEN_NAMES,
   PROTOCOL_NFT_TOKEN_NAMES,
   TEIKI_PLANT_NFT_TOKEN_NAME,
+  TEIKI_TOKEN_NAME,
 } from "@teiki/protocol/contracts/common/constants";
 
 import { StakingIndexer } from "../../framework/chain/staking";
@@ -15,7 +16,7 @@ type TeikiChainIndexYamlConfig = {
   bootstrap: O.PointOrOrigin[];
   deployment: ScriptHash[];
   scripts: {
-    // mpTeiki: ScriptHash; // Unused
+    mpTeiki: ScriptHash;
     nftTeikiPlant: ScriptHash;
     nftProtocol: ScriptHash[];
     atProject: ScriptHash[];
@@ -34,6 +35,7 @@ export function loadConfig(rawConfig: TeikiChainIndexYamlConfig) {
     ...config,
     deployment: new Set(deployment),
     authTeikiPlant: `${scripts.nftTeikiPlant}.${TEIKI_PLANT_NFT_TOKEN_NAME}`,
+    assetTeiki: `${scripts.mpTeiki}.${TEIKI_TOKEN_NAME}`,
     authProtocolParams: `${scripts.nftProtocol}.${PROTOCOL_NFT_TOKEN_NAMES.PARAMS}`,
     authsProject: {
       project: scripts.atProject.map(
