@@ -1,7 +1,6 @@
 import fastq from "fastq";
 
 import { TimeDifference, UnixTime } from "@teiki/protocol/types";
-import { assert } from "@teiki/protocol/utils";
 
 import { Connections } from "../connections";
 import { MaybePromise, NonEmpty, noop$async } from "../types/typelevel";
@@ -106,7 +105,10 @@ export function createPollingIndexer<
   const workerConcurrency = concurrency?.workers ?? 8;
 
   async function start(context: Context) {
-    assert(!finalize, `[${name}] Already started.`);
+    if (finalize) {
+      console.warn(`[${name}] Already started.`);
+      return;
+    }
 
     let lastExecution: UnixTime = 0;
     let scheduled: NodeJS.Timeout | null = null;
@@ -136,13 +138,17 @@ export function createPollingIndexer<
       const doHandle = async (task: Task) => {
         const id = task.id;
         const running = inQueue.get(id);
-        assert(running != null, `[${name}] Unknown task: ${id}`);
-        assert(!running, `[${name}] Task is already running: ${id}`);
-        inQueue.set(id, true);
-        try {
-          await handle.call(self, task);
-        } finally {
-          inQueue.delete(id);
+        if (running == null) {
+          console.error(`[${name}] Unknown task: ${id}`);
+        } else if (running) {
+          console.warn(`[${name}] Task is already running: ${id}`);
+        } else {
+          inQueue.set(id, true);
+          try {
+            await handle.call(self, task);
+          } finally {
+            inQueue.delete(id);
+          }
         }
       };
       taskQueue = fastq.promise(doHandle, workerConcurrency);
@@ -237,15 +243,18 @@ export function createPollingIndexer<
           );
           if (taskCount) {
             if (handle) {
-              for (const task of tasks) {
-                inQueue.set(task.id, false);
-                taskQueue.push(task);
-              }
+              for (const task of tasks) inQueue.set(task.id, false);
+              for (const task of tasks) taskQueue.push(task);
               if (!tasksConcurrency) await taskQueue.drained();
             }
             batch && (await batch.call(self, tasks));
             if (tasksConcurrency)
-              console.log(`[${name}] Batched ${taskCount} tasks.`);
+              console.log(
+                `[${name}] Batched ${taskCount} tasks.` +
+                  (willContinue
+                    ? " Will continue after all tasks finished."
+                    : "")
+              );
             else console.log(`[${name}] Finished ${taskCount} tasks.`);
           }
         }
@@ -280,8 +289,8 @@ export function createPollingIndexer<
   }
 
   async function stop() {
-    assert(finalize, `[${name}] Already stopped.`);
-    finalize();
+    if (finalize) finalize();
+    else console.error(`[${name}] Already stopped.`);
   }
 
   return { start, stop };
