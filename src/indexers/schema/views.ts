@@ -244,6 +244,42 @@ async function setupProjectSummaryMatView(sql: Sql) {
           o.spent_slot IS NULL
         GROUP BY
           ps.project_id
+      ),
+      x_project_related_outputs AS (
+        SELECT
+          po.project_id as pid,
+          sum(amount)::bigint AS total_amount
+        FROM (
+          SELECT
+            uap.id,
+            uap.project_id,
+            coalesce((o.value -> 'lovelace')::bigint, 0) AS amount
+          FROM (
+            SELECT
+              p.id,
+              p.project_id
+            FROM
+              chain.project p
+            UNION ALL
+            SELECT
+              pd.id,
+              pd.project_id
+            FROM
+              chain.project_detail pd
+            UNION ALL
+            SELECT
+              ps.id,
+              ps.project_id
+            FROM
+              chain.project_script ps
+          ) uap
+          INNER JOIN
+            chain.output o ON o.id = uap.id
+          WHERE
+            o.spent_slot IS NULL
+        ) po
+        GROUP BY
+          po.project_id
       )
       SELECT
         x_project.pid AS project_id,
@@ -253,6 +289,11 @@ async function setupProjectSummaryMatView(sql: Sql) {
         x_project_time.last_updated_time,
         coalesce(x_backing.backer_count, 0) AS backer_count,
         coalesce(x_backing.total_backing_amount, 0) AS total_backing_amount,
+        coalesce(x_backing.total_backing_amount, 0) + (CASE
+          WHEN (status IN ('closed', 'delisted')) 
+            THEN 0
+            ELSE coalesce(x_project_related_outputs.total_amount, 0) 
+        END) AS total_staking_amount,
         x_project_detail.withdrawn_funds,
         x_project_detail.sponsorship_amount,
         x_project_detail.sponsorship_until,
@@ -262,8 +303,9 @@ async function setupProjectSummaryMatView(sql: Sql) {
         x_project
         LEFT JOIN x_project_detail ON x_project.pid = x_project_detail.pid
         LEFT JOIN x_project_time ON x_project.pid = x_project_time.pid
+        LEFT JOIN x_project_related_outputs ON x_project.pid = x_project_related_outputs.pid
         LEFT JOIN x_backing ON x_project.pid = x_backing.pid
-        LEFT JOIN x_staking ON x_project.pid = x_staking.pid;
+        LEFT JOIN x_staking ON x_project.pid = x_staking.pid
     `
   );
   await sql`
