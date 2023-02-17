@@ -9,7 +9,7 @@ import { toJson } from "@teiki/protocol/json";
 import { Cid } from "@teiki/protocol/types";
 import { assert } from "@teiki/protocol/utils";
 
-import * as config from "../../config";
+import { ENV } from "../../config";
 import { Connections } from "../../connections";
 import { $setup } from "../../framework/base";
 import {
@@ -38,8 +38,7 @@ const NORMAL_CONFIG = {
   workers: 1,
 };
 
-const CURRENT_CONFIG =
-  config.ENV === "staging" ? STAGING_CONFIG : NORMAL_CONFIG;
+const CURRENT_CONFIG = ENV === "staging" ? STAGING_CONFIG : NORMAL_CONFIG;
 
 aiPodcastIndexer.setup = $setup(async ({ sql }) => {
   await sql`
@@ -113,7 +112,7 @@ export function aiPodcastIndexer(
         // Therefore we won't try to "skip" failed tasks for now.
         willRetry = true;
 
-        if (config.ENV === "staging") {
+        if (ENV === "staging") {
           console.log(`[ai.podcast] Waiting for ${id}.wav to be uploaded.`);
           checkExceptions(
             await waitUntilObjectExists(

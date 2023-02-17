@@ -7,6 +7,7 @@ import {
 
 import { assert } from "@teiki/protocol/utils";
 
+import { TEIKI_HOST } from "../config";
 import { Connections } from "../connections";
 import { sqlNotIn } from "../db/fragments";
 import { $setup } from "../framework/base";
@@ -103,8 +104,8 @@ export function discordProjectAlertIndexer(
         assert(channel, `Channel ${channelId} not found`);
         assert("send" in channel, `Channel ${channelId} is not sendable`);
         const projectUrl = customUrl
-          ? `https://testnet.teiki.network/projects/${customUrl}`
-          : `https://testnet.teiki.network/projects-by-id/${id}`;
+          ? `${TEIKI_HOST}/projects/${customUrl}`
+          : `${TEIKI_HOST}/projects-by-id/${id}`;
         channel.send({
           content: `New project: ${projectUrl}\n<@&${shinkaRoleId}>`,
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
