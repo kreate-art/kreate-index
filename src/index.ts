@@ -185,7 +185,7 @@ const DisabledIndexers: Partial<Record<config.Env, string[]>> = {
     "ai.project_moderation",
     "discord.project_alert",
   ],
-  staging: ["ai.logo", "ai.podcast", "discord.project_alert"],
+  testnet: ["discord.project_alert"],
 };
 const disabled = DisabledIndexers[config.ENV] ?? [];
 

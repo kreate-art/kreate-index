@@ -19,8 +19,7 @@ function requiredEnv(key: string): string {
 
 // TODO: Env vars validation
 
-// TODO: Drop `staging` env
-export type Env = "development" | "staging" | "testnet" | "mainnet";
+export type Env = "development" | "testnet" | "mainnet";
 export type Network = "preview" | "preprod" | "mainnet";
 
 export const ENV = (process.env.ENV || "development") as Env;
