@@ -1,0 +1,24 @@
+bootstrap:
+  # 1 block before the actual bootstrap
+  - slot: 85177919
+    hash: 83d260683ffd6627dc9b4803b5f21227283b5c20296581364fc8594bc10370e0
+deployment:
+  # Always Fail
+  - 51936f3c98a04b6609aa9b5c832ba1182cf43a58e534fcc05db09d69
+  # V | Protocol Script
+  - 1dc0ce8d2e236f51227fcdbf1f21b60444710566852e7f6164c8e5b8
+scripts:
+  mpTeiki: 7997515a67e60ccae7ddfa6d19a93d303334cc191e5e304cec06bc9a
+  nftTeikiPlant: bbc3c6092a6ea672f4f43aaddf31a841bfa83f3e79663e1d6647e819
+  nftProtocol: 9d7131452013812e04286af09ebaf924ad932235c3954e201b53d248
+  # For these fields, latest version goes first
+  atProject:
+    - 76b0221137c2cf4debe0dc70639e701dde976f2db8c4888ee4489c2a
+  mpProofOfBacking:
+    - 6bdb7e28f6ff0f2fa14485bec5d6a854c5ec7b85d9dbc9b4d95f313d
+  vDedicatedTreasury:
+    - def11f56d2626eb54f5cc0eb3c60f644c3e52fb455e0ed4c91780222
+  vSharedTreasury:
+    - b22b85040ac666e7572b416243ae73944c8527a70d6842c9853da295
+  vOpenTreasury:
+    - 5ff629e622575786026478b1470f2b6e2bbee046011857aa4db97702
