@@ -152,7 +152,7 @@ export function aiPodcastIndexer(
         }
       } catch (e) {
         console.error(`[ai.podcast] Error ${id}`, e);
-        error = e instanceof Error ? e.message : toJson(e);
+        error = e instanceof Error ? e.message : e ? toJson(e) : "ERROR";
       }
       if (error) {
         if (willRetry) this.retry();

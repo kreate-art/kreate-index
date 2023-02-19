@@ -250,7 +250,7 @@ async function callContentModeration(
     console.log(`[ai.project_moderation] OK: ${id}`);
   } catch (e) {
     console.error(`[ai.project_moderation] Error ${id}`, e);
-    error = e instanceof Error ? e.message : toJson(e);
+    error = e instanceof Error ? e.message : e ? toJson(e) : "ERROR";
   }
   return { labels, error };
 }
