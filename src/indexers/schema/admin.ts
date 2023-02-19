@@ -13,7 +13,7 @@ async function setupFeaturedProjectTable(sql: Sql) {
     )
   `;
   await sql`
-    CREATE OR REPLACE FUNCTION featured_project_refresh ()
+    CREATE OR REPLACE FUNCTION admin.featured_project_refresh ()
       RETURNS TRIGGER
       LANGUAGE PLPGSQL
       AS
@@ -28,7 +28,7 @@ async function setupFeaturedProjectTable(sql: Sql) {
     CREATE OR REPLACE TRIGGER featured_project_refresh_trigger
       AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE ON admin.featured_project
       FOR EACH statement
-      EXECUTE FUNCTION featured_project_refresh ()
+      EXECUTE FUNCTION admin.featured_project_refresh ()
   `;
 }
 
@@ -39,7 +39,7 @@ async function setupBlockedProjectTable(sql: Sql) {
     )
   `;
   await sql`
-    CREATE OR REPLACE FUNCTION blocked_project_refresh ()
+    CREATE OR REPLACE FUNCTION admin.blocked_project_refresh ()
       RETURNS TRIGGER
       LANGUAGE PLPGSQL
       AS
@@ -55,6 +55,6 @@ async function setupBlockedProjectTable(sql: Sql) {
     CREATE OR REPLACE TRIGGER blocked_project_refresh_trigger
       AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE ON admin.blocked_project
       FOR EACH statement
-      EXECUTE FUNCTION blocked_project_refresh ()
+      EXECUTE FUNCTION admin.blocked_project_refresh ()
   `;
 }
