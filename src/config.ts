@@ -48,7 +48,9 @@ export function cardano() {
 export function database() {
   return {
     DATABASE_URL: requiredEnv("DATABASE_URL"),
-    DATABASE_MAX_CONNECTIONS: Number(process.env.DATABASE_MAX_CONNECTIONS || 8),
+    DATABASE_MAX_CONNECTIONS: Number(
+      process.env.DATABASE_MAX_CONNECTIONS || 16
+    ),
   };
 }
 
