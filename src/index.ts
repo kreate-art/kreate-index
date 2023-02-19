@@ -26,6 +26,9 @@ import { MaybePromise } from "./types/typelevel";
 // Cleanups
 const shutdowns: (() => MaybePromise<void>)[] = [];
 
+// Global states
+let willSaveCheckpoint = true;
+
 prexit(async (signal, error, idk) => {
   console.warn(`$ TIME: ${((Date.now() - RUN_AT) / 1000).toFixed(2)}`);
   console.warn("$ EXIT:", signal, error, idk);
@@ -87,7 +90,10 @@ const teikiChainIndexer: Indexer = {
     });
     console.log("<> Chain intersection found:", intersection);
     return async () => {
-      await indexer.stop(true);
+      await indexer.stop({
+        immediate: true,
+        saveCheckpoint: willSaveCheckpoint,
+      });
       await indexer.staking.stop();
     };
   },
@@ -225,10 +231,18 @@ for (const [index, name] of sorted) {
 
 const notifications = await connections.provideOne("notifications");
 notifications.listen(
-  "index:reload",
-  // Just shutdown for now...
-  () => prexit.exit(174),
-  () => console.log("Listening on index:reload for signals...")
+  "index",
+  (payload: string) => {
+    if (payload === "reload") {
+      console.log("Received signal: reload");
+      // Just shutdown for now...
+      willSaveCheckpoint = false;
+      prexit.exit(174);
+    } else {
+      console.warn(`Unrecognized signal: ${payload}`);
+    }
+  },
+  () => console.log('Listening on "index" for signals...')
 );
 
 if (willSetup) {

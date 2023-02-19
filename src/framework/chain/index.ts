@@ -247,7 +247,7 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
     console.log("... Starting");
     const synchronized = fastq.promise((fn) => fn(), 1);
     queueCatch(synchronized, onError, async (error) => {
-      await this.stop(true);
+      await this.stop({ immediate: true });
       throw error;
     });
 
@@ -321,7 +321,13 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
     return csr;
   }
 
-  public async stop(immediate: boolean) {
+  public async stop({
+    immediate,
+    saveCheckpoint = true,
+  }: {
+    immediate: boolean;
+    saveCheckpoint?: boolean;
+  }) {
     if (this.status === "inactive") {
       console.warn("[Chain] Already stopped.");
     } else if (this.status === "stopping") {
@@ -331,35 +337,36 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
         "[Chain] Not fully started yet. Try stopping again later..."
       );
       await scheduler.wait(1_000);
-      await this.stop(immediate);
+      await this.stop({ immediate, saveCheckpoint });
     } else {
       this.status = "stopping";
       console.log("... Stopping");
       await this.clients.chainSync.shutdown(immediate);
       const { blockIngestor, connections, context } = this;
       const { sql, synchronized } = connections;
+      synchronized.killAndDrain();
+      await synchronized.drained();
       const lastBlock = blockIngestor.lastBlock;
       if (lastBlock) {
-        console.log(`^^ Checkpoint saving...`);
-        await synchronized.push(async () => {
-          // A mini version of rollBackward
-          this.blockIngestor.rollBackward(lastBlock);
-          const params = {
-            point: lastBlock,
-            connections,
-            context,
-            action: "end" as const,
-          };
-          for (const handler of this.handlers.rollbacks) await handler(params);
-          await sqlDeleteChainBlockAfter(sql, lastBlock.slot);
+        console.log(`^^ Checkpoint revert...`);
+        this.blockIngestor.rollBackward(lastBlock);
+        const params = {
+          point: lastBlock,
+          connections,
+          context,
+          action: "end" as const,
+        };
+        for (const handler of this.handlers.rollbacks) await handler(params);
+        await sqlDeleteChainBlockAfter(sql, lastBlock.slot);
+        if (saveCheckpoint) {
           await sqlInsertChainBlock(sql, lastBlock, true);
-        });
-        console.log(`^^ Checkpoint saved!`);
+          console.log("^^ Checkpoint saved!");
+        } else {
+          console.warn("^^ Checkpoint ignored!");
+        }
       } else {
         console.warn("^^ No checkpoint :(");
       }
-      synchronized.killAndDrain();
-      await synchronized.drained();
       console.log("!!! Stopped");
       this.status = "inactive";
     }
