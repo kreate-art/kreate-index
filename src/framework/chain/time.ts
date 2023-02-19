@@ -19,19 +19,23 @@ export function createSlotTimeInterpreter(
   // It's fine to refetch every single block
   const staleSlot = slotFrom(ledgerTip) + (safeZone ?? 0);
 
+  function slotToRelativeTime(slot: O.Slot): O.RelativeTime {
+    for (const era of reversedEras) {
+      const start = era.start;
+      if (slot >= start.slot)
+        return start.time + (slot - start.slot) * era.parameters.slotLength;
+    }
+    throw new Error("Not fit into any era");
+  }
+
+  function slotToAbsoluteTime(slot: O.Slot): UnixTime {
+    return systemStart + slotToRelativeTime(slot) * 1_000;
+  }
+
   return {
     ledgerTipSlot,
     staleSlot,
-    slotToRelativeTime: function (slot: O.Slot): O.RelativeTime {
-      for (const era of reversedEras) {
-        const start = era.start;
-        if (slot >= start.slot)
-          return start.time + (slot - start.slot) * era.parameters.slotLength;
-      }
-      throw new Error("Not fit into any era");
-    },
-    slotToAbsoluteTime: function (slot: O.Slot): UnixTime {
-      return systemStart + slot * 1000;
-    },
+    slotToRelativeTime,
+    slotToAbsoluteTime,
   };
 }
