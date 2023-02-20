@@ -170,6 +170,7 @@ const AllIndexers = {
       const cc = config.ai();
       return {
         aiServerUrl: cc.AI_SERVER_URL,
+        ipfsGatewayUrl: cc.IPFS_GATEWAY_URL,
       };
     }
   ),

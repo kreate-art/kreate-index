@@ -11,6 +11,7 @@ import { objectEntries } from "../../utils";
 
 export type AiProjectModerationContext = {
   aiServerUrl: string;
+  ipfsGatewayUrl: string;
 };
 
 const LABELS = [
@@ -24,8 +25,10 @@ const LABELS = [
   "discrimination",
   "drug",
   "gun",
+  "pornographic",
 ];
 
+// Note: Adjust weights if needed
 const WEIGHTS = {
   title: 5,
   slogan: 4,
@@ -35,6 +38,7 @@ const WEIGHTS = {
   announcement: 3,
   roadmap: 2,
   faq: 2,
+  media: 3,
 };
 
 // We might need to add more fields, depends on our moderation scope
@@ -52,6 +56,7 @@ type ProjectInfo = {
   description: AnyBufs;
   roadmap: string;
   faq: string;
+  media: string[]; // list of CIDs of project media
 };
 
 type ProjectAnnouncement = {
@@ -59,7 +64,7 @@ type ProjectAnnouncement = {
 };
 
 // Contains sections being moderated
-type Sections<T> = { [K in keyof T]: string };
+type Sections<T> = { [K in keyof T]: string | string[] };
 
 // Moderation result from AI
 type ModerationResult = {
@@ -83,6 +88,7 @@ aiProjectModerationIndexer.setup = $setup(async ({ sql }) => {
       discrimination smallint,
       drug smallint,
       gun smallint,
+      pornographic smallint,
       error text
     )
   `;
@@ -158,7 +164,7 @@ export function aiProjectModerationIndexer(
     handle: async function ({ id: _, cid, ...data }) {
       const {
         connections: { sql },
-        context: { aiServerUrl },
+        context: { aiServerUrl, ipfsGatewayUrl },
       } = this;
 
       let description = undefined;
@@ -195,7 +201,8 @@ export function aiProjectModerationIndexer(
       const { labels, error } = await callContentModeration(
         cid,
         { ...data, description, announcement },
-        aiServerUrl
+        aiServerUrl,
+        ipfsGatewayUrl
       );
 
       if (error == null) {
@@ -225,29 +232,61 @@ export function aiProjectModerationIndexer(
 async function callContentModeration(
   cid: Cid,
   sections: Partial<Sections<ProjectInfo> & Sections<ProjectAnnouncement>>,
-  aiServerUrl: string
+  aiServerUrl: string,
+  ipfsGatewayUrl: string
 ): Promise<ModerationResult> {
   const labels = new Map<string, number>();
   let error: string | null = null;
   try {
     for (const [key, value] of objectEntries(sections)) {
-      if (!value) continue;
-      const res = await fetch(`${aiServerUrl}/ai-content-moderation`, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ text: value }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data == null) throw new Error(`Response invalid: ${toJson(data)}`);
-        for (const rlabel of data.tags) {
-          const label = rlabel.replace(" ", "_");
-          labels.set(label, (labels.get(label) ?? 0) + WEIGHTS[key]);
+      if (key === "media") {
+        if (!value || !Array.isArray(value)) continue;
+        for (const cid of value) {
+          const res = await fetch(`${aiServerUrl}/image-content-moderation`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: new URLSearchParams({
+              url: `${ipfsGatewayUrl}/ipfs/${cid}`,
+            }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data == null)
+              throw new Error(`Response invalid: ${toJson(data)}`);
+            for (const rlabel of data.tags) {
+              const label = rlabel.replace(" ", "_");
+              labels.set(label, (labels.get(label) ?? 0) + WEIGHTS[key]);
+            }
+          } else {
+            error = `Response: ${res.status} - ${
+              res.statusText
+            }: ${await res.text()}`;
+          }
         }
       } else {
-        error = `Response: ${res.status} - ${
-          res.statusText
-        }: ${await res.text()}`;
+        if (!value || Array.isArray(value)) continue;
+        const res = await fetch(`${aiServerUrl}/ai-content-moderation`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ text: value }),
+        });
+
+        // Duplicated with the above code, refine if needed.
+        if (res.ok) {
+          const data = await res.json();
+          if (data == null)
+            throw new Error(`Response invalid: ${toJson(data)}`);
+          for (const rlabel of data.tags) {
+            const label = rlabel.replace(" ", "_");
+            labels.set(label, (labels.get(label) ?? 0) + WEIGHTS[key]);
+          }
+        } else {
+          error = `Response: ${res.status} - ${
+            res.statusText
+          }: ${await res.text()}`;
+        }
       }
     }
     console.log(`[ai.project_moderation] OK: ${cid}`);
