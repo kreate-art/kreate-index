@@ -97,6 +97,12 @@ export function chainIndex() {
   };
 }
 
+export function aws() {
+  return {
+    ASSETS_S3_BUCKET: requiredEnv("ASSETS_S3_BUCKET"),
+  };
+}
+
 export function ai() {
   return {
     AI_SERVER_URL: requiredEnv("AI_SERVER_URL"),

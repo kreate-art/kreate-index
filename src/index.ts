@@ -143,12 +143,11 @@ const AllIndexers = {
     aiPodcastIndexer,
     ["sql", "s3", "notifications"],
     () => {
-      const cc = config.ai();
       return {
-        aiServerUrl: cc.AI_SERVER_URL,
-        s3Bucket: cc.AI_S3_BUCKET,
+        aiServerUrl: config.ai().AI_SERVER_URL,
+        s3Bucket: config.aws().ASSETS_S3_BUCKET,
         s3Prefix: "podcasts/",
-        summaryWordsLimit: config.cardano().NETWORK === "mainnet" ? 1500 : 100,
+        summaryWordsLimit: config.cardano().NETWORK === "mainnet" ? 1_500 : 100,
       };
     }
   ),
