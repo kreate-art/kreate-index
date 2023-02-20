@@ -1,12 +1,6 @@
-import { parseProtocolParams } from "@teiki/protocol/helpers/schema";
 import * as S from "@teiki/protocol/schema";
-import {
-  LegacyProtocolParamsDatum,
-  ProtocolParamsDatum,
-} from "@teiki/protocol/schema/teiki/protocol";
-import { assert } from "@teiki/protocol/utils";
+import { ProtocolParamsDatum } from "@teiki/protocol/schema/teiki/protocol";
 
-import { LEGACY } from "../../config";
 import { $handlers } from "../../framework/chain";
 import { prettyOutRef } from "../../framework/chain/conversions";
 
@@ -23,28 +17,6 @@ export const setup = $.setup(async ({ sql }) => {
     )
   `;
 });
-
-export const initialize = $.initialize(
-  async ({ connections: { sql }, context }) => {
-    const result = await sql<
-      { datumJson: ProtocolParamsDatum | LegacyProtocolParamsDatum }[]
-    >`
-      SELECT
-        pp.datum_json
-      FROM
-        chain.protocol_params pp
-        INNER JOIN chain.output o ON pp.id = o.id
-      WHERE
-        o.spent_slot IS NULL
-    `;
-    if (result.length) {
-      const row = result[result.length - 1];
-      context.projectSponsorshipMinFee = row.datumJson.projectSponsorshipMinFee;
-    } else {
-      console.warn("No protocol params found");
-    }
-  }
-);
 
 export const filter = $.filter(
   ({
@@ -71,12 +43,9 @@ export const event = $.event(
         );
       }
 
-      const { legacy, protocolParams } = parseProtocolParams(
-        S.fromCbor(output.datum)
-      );
-      assert(
-        legacy === LEGACY,
-        `Protocol Params should be a ${LEGACY ? "legacy" : "current"} one`
+      const protocolParams = S.fromData(
+        S.fromCbor(output.datum),
+        ProtocolParamsDatum
       );
 
       const registry = protocolParams.registry;
@@ -94,8 +63,6 @@ export const event = $.event(
       hashes.openTreasury.add(
         registry.openTreasuryValidator.latest.script.hash
       );
-      context.projectSponsorshipMinFee =
-        protocolParams.projectSponsorshipMinFee;
 
       return ["protocol-params", { datumJson: protocolParams }];
     });

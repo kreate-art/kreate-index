@@ -1,9 +1,6 @@
 import { getAddressDetailsSafe } from "@teiki/protocol/helpers/lucid";
 import * as S from "@teiki/protocol/schema";
-import {
-  ProtocolParamsDatum,
-  LegacyProtocolParamsDatum,
-} from "@teiki/protocol/schema/teiki/protocol";
+import { ProtocolParamsDatum } from "@teiki/protocol/schema/teiki/protocol";
 import {
   DedicatedTreasuryDatum,
   OpenTreasuryDatum,
@@ -63,9 +60,7 @@ export const initialize = $.initialize(
       scriptHashes: { dedicatedTreasury, sharedTreasury, openTreasury },
     },
   }) => {
-    const result = await sql<
-      { datumJson: ProtocolParamsDatum | LegacyProtocolParamsDatum }[]
-    >`
+    const result = await sql<{ datumJson: ProtocolParamsDatum }[]>`
       SELECT datum_json FROM chain.protocol_params
     `;
 

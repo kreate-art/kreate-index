@@ -10,7 +10,6 @@ import {
 } from "@teiki/protocol/contracts/common/constants";
 
 import { StakingIndexer } from "../../framework/chain/staking";
-import { Lovelace } from "../../types/chain";
 
 type TeikiChainIndexYamlConfig = {
   bootstrap: O.PointOrOrigin[];
@@ -75,5 +74,4 @@ export type TeikiChainIndexContext = {
     sharedTreasury: Set<ScriptHash>;
     openTreasury: Set<ScriptHash>;
   };
-  projectSponsorshipMinFee: Lovelace;
 };
