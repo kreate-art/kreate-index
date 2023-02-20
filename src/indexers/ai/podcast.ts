@@ -22,7 +22,12 @@ export type AiPodcastContext = {
   s3Bucket: string;
   s3Prefix: string;
 };
-type Task = { id: Cid; title: string; summary: string };
+type Task = {
+  id: Cid;
+  title: string;
+  announcementTitle: string;
+  summary: string;
+};
 
 const TASKS_PER_FETCH = 40;
 
@@ -72,11 +77,13 @@ export function aiPodcastIndexer(
         SELECT
           cid AS id,
           title,
+          announcement_title,
           summary
         FROM (
           SELECT
             DISTINCT pa.cid,
             pi.title,
+            NULLIF (pa.data #>> '{data, title}', '') AS announcement_title,
             NULLIF (pa.data #>> '{data, summary}', '') AS summary
           FROM
             ipfs.project_announcement pa
@@ -92,7 +99,7 @@ export function aiPodcastIndexer(
       return { tasks, continue: tasks.length >= TASKS_PER_FETCH };
     },
 
-    handle: async function ({ id, title, summary }: Task) {
+    handle: async function ({ id, title, announcementTitle, summary }: Task) {
       const {
         connections: { sql, s3 },
         context: { aiServerUrl, s3Bucket, s3Prefix },
@@ -103,6 +110,11 @@ export function aiPodcastIndexer(
       try {
         summary = normalizeSummary(summary);
         title = title
+          .split(/\s+/)
+          .filter((w) => !!w)
+          .slice(0, 10)
+          .join(" ");
+        announcementTitle = announcementTitle
           .split(/\s+/)
           .filter((w) => !!w)
           .slice(0, 10)
@@ -129,7 +141,9 @@ export function aiPodcastIndexer(
             headers: {
               "Content-Type": "application/x-www-form-urlencoded",
             },
-            body: new URLSearchParams({ text: [title, summary].join("\n") }),
+            body: new URLSearchParams({
+              text: [title, announcementTitle, summary].join("\n"),
+            }),
           });
           if (!res.ok)
             throw new Error(
