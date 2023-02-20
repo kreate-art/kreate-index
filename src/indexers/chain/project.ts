@@ -1,12 +1,10 @@
 import { Address, ScriptHash } from "lucid-cardano";
 
-import {
-  deconstructAddress,
-  parseProjectDatum,
-  parseProjectDetailDatum,
-} from "@teiki/protocol/helpers/schema";
+import { deconstructAddress } from "@teiki/protocol/helpers/schema";
 import * as S from "@teiki/protocol/schema";
 import {
+  ProjectDatum,
+  ProjectDetailDatum,
   ProjectScriptDatum,
   ProjectStatus,
 } from "@teiki/protocol/schema/teiki/project";
@@ -173,8 +171,7 @@ export const projectEvent = $.event<"project">(
         );
         return undefined;
       }
-      const res = parseProjectDatum(S.fromCbor(output.datum));
-      const projectDatum = res.project;
+      const projectDatum = S.fromData(S.fromCbor(output.datum), ProjectDatum);
       const projectId = projectDatum.projectId.id;
       const status = projectDatum.status;
       const statusTime =
@@ -209,12 +206,7 @@ export const projectEvent = $.event<"project">(
 );
 
 export const projectDetailEvent = $.event<"project_detail">(
-  async ({
-    driver,
-    connections: { sql },
-    event: { indicies },
-    context: { projectSponsorshipMinFee },
-  }) => {
+  async ({ driver, connections: { sql }, event: { indicies } }) => {
     let hasAnnouncement = false;
     const projectDetails = await driver.store(indicies, (output) => {
       if (output.datum == null) {
@@ -224,29 +216,21 @@ export const projectDetailEvent = $.event<"project_detail">(
         );
         return undefined;
       }
-      const res = parseProjectDetailDatum(S.fromCbor(output.datum));
-      const projectDetailDatum = res.projectDetail;
+      const projectDetailDatum = S.fromData(
+        S.fromCbor(output.datum),
+        ProjectDetailDatum
+      );
       const projectId = projectDetailDatum.projectId.id;
-      let sponsorship: {
-        sponsorshipAmount: Lovelace;
-        sponsorshipUntil: UnixTime;
-      } | null = null;
-      if (res.legacy) {
-        const spUntil = res.projectDetail?.sponsoredUntil;
-        if (spUntil)
-          sponsorship = {
-            sponsorshipAmount: projectSponsorshipMinFee,
-            sponsorshipUntil: Number(spUntil.timestamp),
+      const datSponsorship = projectDetailDatum.sponsorship;
+      const sponsorship = datSponsorship
+        ? {
+            sponsorshipAmount: datSponsorship.amount,
+            sponsorshipUntil: Number(datSponsorship.until.timestamp),
+          }
+        : {
+            sponsorshipAmount: null,
+            sponsorshipUntil: null,
           };
-      } else {
-        const sp = res.projectDetail.sponsorship;
-        if (sp)
-          sponsorship = {
-            sponsorshipAmount: sp.amount,
-            sponsorshipUntil: Number(sp.until.timestamp),
-          };
-      }
-
       if (projectDetailDatum.lastAnnouncementCid) hasAnnouncement = true;
       return [
         `project-detail:${projectId}`,
@@ -256,10 +240,7 @@ export const projectDetailEvent = $.event<"project_detail">(
           informationCid: projectDetailDatum.informationCid.cid,
           lastAnnouncementCid:
             projectDetailDatum.lastAnnouncementCid?.cid ?? null,
-          ...(sponsorship ?? {
-            sponsorshipUntil: null,
-            sponsorshipAmount: null,
-          }),
+          ...sponsorship,
         },
       ];
     });

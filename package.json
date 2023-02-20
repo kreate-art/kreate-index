@@ -25,7 +25,7 @@
     "@aws-sdk/client-s3": "^3.272.0",
     "@aws-sdk/lib-storage": "^3.272.0",
     "@cardano-ogmios/client": "^5.6.0",
-    "@teiki/protocol": "github:teiki-network/teiki-protocol#9ff40b0b8300b833e0e0c0d8fc97faaff48fb954",
+    "@teiki/protocol": "github:teiki-network/teiki-protocol#303cad75a93bd7c6862cad3b7470fa3db1c4aa2e",
     "discord.js": "14.7.1",
     "dotenv": "^16.0.3",
     "fastq": "^1.15.0",

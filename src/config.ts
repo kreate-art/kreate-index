@@ -24,8 +24,6 @@ export type Network = "preview" | "preprod" | "mainnet";
 
 export const ENV = (process.env.ENV || "development") as Env;
 
-export const LEGACY = Boolean(Number(process.env.LEGACY || 0));
-
 export const TEIKI_HOST = requiredEnv("TEIKI_HOST");
 
 export function pick<T extends Record<string, unknown>, K extends keyof T>(
