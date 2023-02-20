@@ -9,6 +9,7 @@ import { toJson } from "@teiki/protocol/json";
 import { Cid } from "@teiki/protocol/types";
 import { assert } from "@teiki/protocol/utils";
 
+import * as config from "../../config";
 import { Connections } from "../../connections";
 import { $setup } from "../../framework/base";
 import {
@@ -186,7 +187,7 @@ function splitToWords(text: string) {
 
 function normalizeSummary(
   summary: string,
-  wordsLimit = 100,
+  wordsLimit = config.cardano().NETWORK === "mainnet" ? 1500 : 100,
   outro = "For more information, please read the full announcement on Teiki."
 ) {
   let remaining = wordsLimit;
