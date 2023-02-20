@@ -22,7 +22,12 @@ export type AiPodcastContext = {
   s3Bucket: string;
   s3Prefix: string;
 };
-type Task = { id: Cid; title: string; summary: string };
+type Task = {
+  id: Cid;
+  title: string;
+  announcementTitle: string;
+  announcementSummary: string;
+};
 
 const TASKS_PER_FETCH = 40;
 
@@ -72,12 +77,14 @@ export function aiPodcastIndexer(
         SELECT
           cid AS id,
           title,
-          summary
+          announcement_title,
+          announcement_summary
         FROM (
           SELECT
             DISTINCT pa.cid,
             pi.title,
-            NULLIF (pa.data #>> '{data, summary}', '') AS summary
+            NULLIF (pa.data #>> '{data, title}', '') AS announcement_title,
+            NULLIF (pa.data #>> '{data, summary}', '') AS announcement_summary
           FROM
             ipfs.project_announcement pa
           INNER JOIN chain.project_detail pd ON pa.cid = pd.last_announcement_cid
@@ -86,13 +93,18 @@ export function aiPodcastIndexer(
           WHERE
             pod.cid IS NULL) u
         WHERE
-          summary IS NOT NULL
+          announcement_summary IS NOT NULL
         LIMIT ${TASKS_PER_FETCH};
       `;
       return { tasks, continue: tasks.length >= TASKS_PER_FETCH };
     },
 
-    handle: async function ({ id, title, summary }: Task) {
+    handle: async function ({
+      id,
+      title,
+      announcementTitle,
+      announcementSummary,
+    }: Task) {
       const {
         connections: { sql, s3 },
         context: { aiServerUrl, s3Bucket, s3Prefix },
@@ -101,13 +113,15 @@ export function aiPodcastIndexer(
       let willRetry = false;
       const s3Key = `${s3Prefix}${id}.wav`;
       try {
-        summary = normalizeSummary(summary);
-        title = title
-          .split(/\s+/)
-          .filter((w) => !!w)
+        announcementSummary = normalizeSummary(announcementSummary);
+        title = splitToWords(title).slice(0, 10).join(" ");
+        announcementTitle = splitToWords(announcementTitle)
           .slice(0, 10)
           .join(" ");
-        assert(summary.length >= 100, `update summary is too short (< 100)`);
+        assert(
+          announcementSummary.length >= 100,
+          `update summary is too short (< 100)`
+        );
 
         // TODO: The TTS server is really fragile at the moment
         // Therefore we won't try to "skip" failed tasks for now.
@@ -129,7 +143,9 @@ export function aiPodcastIndexer(
             headers: {
               "Content-Type": "application/x-www-form-urlencoded",
             },
-            body: new URLSearchParams({ text: [title, summary].join("\n") }),
+            body: new URLSearchParams({
+              text: [title, announcementTitle, announcementSummary].join("\n"),
+            }),
           });
           if (!res.ok)
             throw new Error(
@@ -164,6 +180,10 @@ export function aiPodcastIndexer(
   });
 }
 
+function splitToWords(text: string) {
+  return text.split(/\s+/).filter((w) => !!w);
+}
+
 function normalizeSummary(
   summary: string,
   wordsLimit = 100,
@@ -172,7 +192,7 @@ function normalizeSummary(
   let remaining = wordsLimit;
   const lines: string[] = [];
   for (const line of summary.split(/(?:\r?\n)+/)) {
-    const words = line.split(/\s+/).filter((w) => !!w);
+    const words = splitToWords(line);
     if (words.length <= remaining) {
       remaining -= words.length;
       lines.push(line);
