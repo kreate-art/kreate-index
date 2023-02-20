@@ -148,6 +148,7 @@ const AllIndexers = {
         aiServerUrl: cc.AI_SERVER_URL,
         s3Bucket: cc.AI_S3_BUCKET,
         s3Prefix: "podcasts/",
+        summaryWordsLimit: config.cardano().NETWORK === "mainnet" ? 1500 : 100,
       };
     }
   ),

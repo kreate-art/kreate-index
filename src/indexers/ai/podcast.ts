@@ -9,7 +9,6 @@ import { toJson } from "@teiki/protocol/json";
 import { Cid } from "@teiki/protocol/types";
 import { assert } from "@teiki/protocol/utils";
 
-import * as config from "../../config";
 import { Connections } from "../../connections";
 import { $setup } from "../../framework/base";
 import {
@@ -22,6 +21,7 @@ export type AiPodcastContext = {
   aiServerUrl: string;
   s3Bucket: string;
   s3Prefix: string;
+  summaryWordsLimit: number;
 };
 type Task = {
   id: Cid;
@@ -108,13 +108,16 @@ export function aiPodcastIndexer(
     }: Task) {
       const {
         connections: { sql, s3 },
-        context: { aiServerUrl, s3Bucket, s3Prefix },
+        context: { aiServerUrl, s3Bucket, s3Prefix, summaryWordsLimit },
       } = this;
       let error: string | null = null;
       let willRetry = false;
       const s3Key = `${s3Prefix}${id}.wav`;
       try {
-        announcementSummary = normalizeSummary(announcementSummary);
+        announcementSummary = normalizeSummary(
+          announcementSummary,
+          summaryWordsLimit
+        );
         title = splitToWords(title).slice(0, 10).join(" ");
         announcementTitle = splitToWords(announcementTitle)
           .slice(0, 10)
@@ -187,7 +190,7 @@ function splitToWords(text: string) {
 
 function normalizeSummary(
   summary: string,
-  wordsLimit = config.cardano().NETWORK === "mainnet" ? 1500 : 100,
+  wordsLimit: number,
   outro = "For more information, please read the full announcement on Teiki."
 ) {
   let remaining = wordsLimit;
