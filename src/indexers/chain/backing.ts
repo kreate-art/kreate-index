@@ -1,15 +1,14 @@
 import * as O from "@cardano-ogmios/schema";
-import { Address } from "lucid-cardano";
+import { Address, TxHash } from "lucid-cardano";
 
 import { deconstructAddress } from "@teiki/protocol/helpers/schema";
-import { fromJson, toJson } from "@teiki/protocol/json";
 import * as S from "@teiki/protocol/schema";
 import { BackingDatum } from "@teiki/protocol/schema/teiki/backing";
 import { Hex, UnixTime } from "@teiki/protocol/types";
 import { assert } from "@teiki/protocol/utils";
 
 import { $handlers } from "../../framework/chain";
-import { prettyOutRef, slotFrom } from "../../framework/chain/conversions";
+import { prettyOutRef } from "../../framework/chain/conversions";
 import { Lovelace } from "../../types/chain";
 import { NonEmpty } from "../../types/typelevel";
 
@@ -26,21 +25,17 @@ export type ChainBacking = {
   unbackedAt: UnixTime | null;
 };
 
-const AllAction = {
-  0: "back",
-  1: "unback",
-  2: "claim_reward", // to be supported
-  3: "migrate", // to be supported
-};
+const ActionTypes = ["back", "unback", "claim_rewards", "migrate"] as const;
 
 export type ChainBackingAction = {
+  action: (typeof ActionTypes)[number];
   projectId: Hex;
   actorAddress: Address;
   amount: Lovelace;
-  message: string | null;
   time: UnixTime;
+  message: string | null;
   slot: number;
-  action: keyof typeof AllAction;
+  txId: TxHash;
 };
 
 export type Event = { type: "backing"; indicies: NonEmpty<number[]> | null };
@@ -57,7 +52,6 @@ export const setup = $.setup(async ({ sql }) => {
       backer_address text NOT NULL,
       backing_amount bigint NOT NULL,
       milestone_backed smallint NOT NULL,
-      backing_message text,
       backed_at timestamptz NOT NULL
     )
   `;
@@ -69,17 +63,54 @@ export const setup = $.setup(async ({ sql }) => {
     CREATE INDEX IF NOT EXISTS backing_backer_address_index
       ON chain.backing(backer_address)
   `;
+
+  await sql`
+    DO $$ BEGIN
+      IF to_regtype('chain.backing_action_type') IS NULL THEN
+        CREATE TYPE chain.backing_action_type AS ENUM (${sql.unsafe(
+          Object.values(ActionTypes)
+            .map((a) => `'${a}'`)
+            .join(", ")
+        )});
+      END IF;
+    END $$
+  `;
   await sql`
     CREATE TABLE IF NOT EXISTS chain.backing_action (
       id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      action chain.backing_action_type NOT NULL,
       project_id varchar(64) NOT NULL,
       actor_address text NOT NULL,
       amount bigint NOT NULL,
-      message text,
       time timestamptz NOT NULL,
-      slot integer NOT NULL,
-      action smallint
+      message text,
+      slot integer NOT NULL REFERENCES chain.block (slot) ON DELETE CASCADE,
+      tx_id varchar(64) NOT NULL
     )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS backing_action_pid_index
+      ON chain.backing_action(project_id)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS backing_action_address_index
+      ON chain.backing_action(actor_address)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS backing_action_type_index
+      ON chain.backing_action(action)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS backing_action_slot_index
+      ON chain.backing_action(slot)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS backing_action_time_index
+      ON chain.backing_action(time)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS backing_action_tx_id_index
+      ON chain.backing_action(tx_id)
   `;
 });
 
@@ -112,19 +143,6 @@ export const filter = $.filter(
   }
 );
 
-type BackingDiff = {
-  unback: Lovelace;
-  back: Lovelace;
-};
-
-type UnbackResult = {
-  projectId: Hex;
-  totalAmount: Lovelace;
-  actorAddress: Address;
-};
-
-type BackingTupleKey = [Hex, Address];
-
 export const event = $.event(
   async ({
     driver,
@@ -138,25 +156,26 @@ export const event = $.event(
     );
     const message = extractCip20Message(tx)?.join("\n") || null;
 
-    const unbackResult = await sql<UnbackResult[]>`
+    const unbackResult = await sql<
+      { projectId: Hex; totalAmount: Lovelace; actorAddress: Address }[]
+    >`
       SELECT
-        SUM(b.backing_amount) AS total_amount,
+        SUM(b.backing_amount)::bigint AS total_amount,
         b.project_id,
         b.backer_address AS actor_address
       FROM chain.backing b
       INNER JOIN chain.output o ON b.id = o.id
       WHERE (o.tx_id, o.tx_ix) IN ${sql(
-        tx.body.inputs.map((input) => sql([input.txId, input.index]))
+        tx.body.inputs.map((input) => sql([input.txId, input.index])) // @sk-shishi
       )}
       GROUP BY
         (b.project_id, b.backer_address)
     `;
 
-    // BackingTupleKey
-    const actionRef: Map<string, BackingDiff> = new Map<string, BackingDiff>();
+    const actionRef = new Map<string, { unback: Lovelace; back: Lovelace }>();
     unbackResult.forEach((value) => {
-      const key: BackingTupleKey = [value.projectId, value.actorAddress];
-      actionRef.set(toJson(key), {
+      const tupleKey = `${value.projectId}|${value.actorAddress}`;
+      actionRef.set(tupleKey, {
         unback: value.totalAmount,
         back: 0n,
       });
@@ -180,31 +199,22 @@ export const event = $.event(
           backingDatum.backerAddress
         );
         const projectId = backingDatum.projectId.id;
-        const tupleKey: BackingTupleKey = [projectId, backerAddress];
-        const res = actionRef.get(toJson(tupleKey));
-
-        if (res) {
-          const oldBacking = res.back;
-          const tupleKey: BackingTupleKey = [projectId, backerAddress];
-          actionRef.set(toJson(tupleKey), {
-            unback: res.unback,
-            back: oldBacking + output.value.lovelace,
-          });
-        } else {
-          actionRef.set(toJson(tupleKey), {
-            unback: 0n,
-            back: output.value.lovelace,
-          });
+        const backingAmount = output.value.lovelace;
+        const tupleKey = `${projectId}|${backerAddress}`;
+        let ref = actionRef.get(tupleKey);
+        if (ref == null) {
+          ref = { unback: 0n, back: 0n };
+          actionRef.set(tupleKey, ref);
         }
+        ref.back += backingAmount;
 
         return [
           "backing",
           {
             projectId,
             backerAddress,
-            backingAmount: output.value.lovelace,
+            backingAmount,
             milestoneBacked: Number(backingDatum.milestoneBacked),
-            backingMessage: message,
             backedAt: txTimeStart,
           },
         ];
@@ -213,32 +223,23 @@ export const event = $.event(
       else await sql`INSERT INTO chain.backing ${sql(backings)}`;
     }
 
-    for (const [_key, value] of actionRef) {
-      const key: BackingTupleKey = fromJson(_key);
-      const delta = BigInt(value.back) - BigInt(value.unback);
-      const action = delta > 0n ? 0 : 1; // back vs unback
-      const backerAction: ChainBackingAction = {
-        projectId: key[0],
-        actorAddress: key[1],
-        amount: delta > 0 ? delta : -delta,
-        message,
-        time, // block time at which executed the action
-        slot,
+    for (const [rawKey, value] of actionRef.entries()) {
+      const [projectId, actorAddress] = rawKey.split("|");
+      const delta = value.back - value.unback;
+      const action = delta > 0n ? "back" : "unback";
+      const backingAction: ChainBackingAction = {
         action,
+        projectId,
+        actorAddress,
+        amount: delta > 0 ? delta : -delta,
+        time, // block time at which executed the action
+        message,
+        slot,
+        txId: tx.id,
       };
-      await sql`INSERT INTO chain.backing_action ${sql(backerAction)}`;
+      await sql`INSERT INTO chain.backing_action ${sql(backingAction)}`;
     }
     driver.refresh("views.project_summary");
-  }
-);
-
-export const rollback = $.rollback(
-  async ({ connections: { sql, views }, point }) => {
-    await sql`
-      DELETE FROM chain.backing_action ba
-        WHERE ba.slot > ${slotFrom(point)}
-    `;
-    views.refresh("views.project_summary");
   }
 );
 
