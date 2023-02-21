@@ -83,7 +83,6 @@ export async function getChainIndexer(connections: BaseChainIndexConnections) {
         teiki_plant: [teiki_plant.event],
       },
       rollbacks: [
-        backing.rollback,
         $.rollback(
           async ({
             context: { staking },
