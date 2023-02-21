@@ -62,14 +62,35 @@ export const setupGenesis = $setup(async ({ sql }) => {
       tx_ix smallint NOT NULL,     -- 2 bytes should be enough
       address text NOT NULL,       -- Bech32
       value jsonb NOT NULL,        -- Lucid: Assets: Record<string | "lovelace", bigint>
-                                    -- I think "value" is clearer than "assets"
+                                   -- I think "value" is clearer than "assets"
       datum text,                  -- CBOR Hex
       datum_hash varchar(64),      -- CBOR Hex
       script_hash varchar(56),
-      created_slot integer NOT NULL REFERENCES chain.block (slot) ON DELETE CASCADE,
-      spent_slot integer REFERENCES chain.block (slot) ON DELETE SET NULL,
-      UNIQUE (tx_id, tx_ix)     -- Just in case we mess up
+      created_slot integer NOT NULL
+        REFERENCES chain.block (slot) ON DELETE CASCADE,
+      spent_slot integer
+        REFERENCES chain.block (slot) ON DELETE SET NULL,
+      spent_tx_id varchar(64),     -- Hex
+      UNIQUE (tx_id, tx_ix)        -- Just in case we mess up
     )
+  `;
+  await sql`
+    CREATE OR REPLACE FUNCTION chain.output_spent_clear ()
+      RETURNS TRIGGER
+      LANGUAGE PLPGSQL
+      AS $$
+    BEGIN
+      NEW.spent_tx_id = NULL;
+      RETURN NEW;
+    END;
+    $$;
+  `;
+  await sql`
+    CREATE OR REPLACE TRIGGER chain_output_spent_clear_trigger
+      BEFORE UPDATE OF spent_slot ON chain.output
+      FOR EACH ROW
+      WHEN (NEW.spent_slot IS NULL AND NEW.spent_slot IS DISTINCT FROM OLD.spent_slot)
+      EXECUTE FUNCTION chain.output_spent_clear ();
   `;
   await sql`
     CREATE INDEX IF NOT EXISTS output_created_slot
@@ -78,6 +99,11 @@ export const setupGenesis = $setup(async ({ sql }) => {
   await sql`
     CREATE INDEX IF NOT EXISTS output_spent_slot
       ON chain.output(spent_slot)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS output_spent_tx_id
+      ON chain.output(spent_tx_id)
+      WHERE spent_tx_id IS NOT NULL
   `;
   // await sql`
   //   CREATE INDEX IF NOT EXISTS output_tag
@@ -465,11 +491,15 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
 
         // Mark UTxOs as spent
         await sql`
-          UPDATE chain.output
-          SET spent_slot = ${slot}
-          WHERE (tx_id, tx_ix) IN ${sql(
-            tx.body.inputs.map((input) => sql([input.txId, input.index]))
-          )}
+          UPDATE
+            chain.output
+          SET
+            spent_slot = ${slot},
+            spent_tx_id = ${tx.id}
+          WHERE
+            (tx_id, tx_ix) IN ${sql(
+              tx.body.inputs.map((input) => sql([input.txId, input.index]))
+            )}
         `;
 
         await driver._finally();

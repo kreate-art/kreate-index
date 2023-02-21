@@ -186,14 +186,16 @@ export function createStakingIndexer({
               console.log(`[staking] Removed: ${hash} - ${address}`);
             }
           }
-          await sql`
-            INSERT INTO chain.staking ${sql(stakings)}
-              ON CONFLICT (hash) DO UPDATE
-              SET address = EXCLUDED.address,
-                  pool_id = EXCLUDED.pool_id,
-                  rewards = EXCLUDED.rewards,
-                  reloaded_slot = EXCLUDED.reloaded_slot
-          `;
+          if (stakings.length) {
+            await sql`
+              INSERT INTO chain.staking ${sql(stakings)}
+                ON CONFLICT (hash) DO UPDATE
+                SET address = EXCLUDED.address,
+                    pool_id = EXCLUDED.pool_id,
+                    rewards = EXCLUDED.rewards,
+                    reloaded_slot = EXCLUDED.reloaded_slot
+            `;
+          }
           console.log(
             `[staking] Reloaded: ${batch.length} ! ` +
               (tip === "origin" ? "origin" : `${tip.slot} | ${tip.hash}`)
