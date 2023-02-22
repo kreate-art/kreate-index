@@ -3,7 +3,7 @@ import fastq from "fastq";
 import { TimeDifference, UnixTime } from "@teiki/protocol/types";
 
 import { Connections } from "../connections";
-import { MaybePromise, NonEmpty, noop$async } from "../types/typelevel";
+import { MaybePromise, NonEmpty, noop$async, WithId } from "../types/typelevel";
 
 import { ErrorHandler, reduceErrorHandler } from "./base";
 
@@ -16,33 +16,28 @@ type PollingTrigger =
   | { scheduled: TimeDifference }
   | { channel: string };
 
-// TODO: Find a way to expose Task here, so we don't have to pass the TaskBoard to initialize
 type PollingThis<Context, Connections extends VitalConnections> = {
   context: Context;
   connections: Connections;
-  // TODO: Proper retry
-  retry: () => void;
+  retry: () => void; // TODO: Proper retry
+  board: PollingTaskBoard;
 };
 
-type ITask<Id> = { id: Id };
+type TaskId = string;
 
-export type PollingTaskBoard<Task extends ITask<Id>, Id> = {
-  queue: fastq.queueAsPromised<Task, void>;
-  inQueue: Map<Id, boolean>; // Map<Id, IsRunning>
+export type PollingTaskBoard = {
+  queue: fastq.queueAsPromised<WithId<unknown, TaskId>, void>;
+  inQueue: Map<TaskId, boolean>; // Map<TaskId, IsRunning>
 };
 
-type PollingIndexParams<
-  Context,
-  Connections extends VitalConnections,
-  Task extends ITask<Id>,
-  Id
-> = {
+// TODO: Make non-blocking polling indexer the default
+// TODO: Only allow `handle` OR `batch`
+
+type PollingIndexParams<Context, Connections extends VitalConnections, Task> = {
   name: string;
   connections: Connections;
-  initialize?: (
-    this: PollingThis<Context, Connections>,
-    board?: PollingTaskBoard<Task, Id>
-  ) => MaybePromise<void>;
+  $id: (task: Task) => TaskId;
+  initialize?: (this: PollingThis<Context, Connections>) => MaybePromise<void>;
   fetch: (
     this: PollingThis<Context, Connections>
   ) => MaybePromise<{ tasks: Task[]; continue: boolean } | null>;
@@ -74,11 +69,11 @@ export type PollingIndexer<Context> = {
 export function createPollingIndexer<
   Context,
   Connections extends VitalConnections,
-  Task extends ITask<Id>,
-  Id
+  Task
 >({
   name,
   connections,
+  $id,
   initialize,
   fetch,
   handle,
@@ -90,12 +85,7 @@ export function createPollingIndexer<
   },
   concurrency,
   onError,
-}: PollingIndexParams<
-  Context,
-  Connections,
-  Task,
-  Id
->): PollingIndexer<Context> {
+}: PollingIndexParams<Context, Connections, Task>): PollingIndexer<Context> {
   let finalize: (() => Promise<void>) | null = null;
 
   // To prevent things from exploding, we disallow unbounded queue.
@@ -130,12 +120,10 @@ export function createPollingIndexer<
     const pollingQueue = fastq.promise(doPoll, 1);
     pollingQueue.error(errorCallback);
 
-    const self = { context, connections, retry: () => (willRetry = true) };
-
-    const inQueue: PollingTaskBoard<Task, Id>["inQueue"] = new Map();
-    let taskQueue: PollingTaskBoard<Task, Id>["queue"];
+    const inQueue = new Map<TaskId, boolean>();
+    let taskQueue: fastq.queueAsPromised<WithId<Task, TaskId>, void>;
     if (handle) {
-      const doHandle = async (task: Task) => {
+      const doHandle = async (task: WithId<Task, TaskId>) => {
         const id = task.id;
         const running = inQueue.get(id);
         if (running == null) {
@@ -170,10 +158,13 @@ export function createPollingIndexer<
 
     console.log(`[${name}] Starting...`);
 
-    if (initialize) {
-      const board = handle ? { queue: taskQueue, inQueue } : undefined;
-      await initialize?.call(self, board);
-    }
+    const self = {
+      context,
+      connections,
+      board: { queue: taskQueue, inQueue },
+      retry: () => (willRetry = true),
+    };
+    if (initialize) await initialize?.call(self);
 
     const notifications = connections.notifications;
     const unlistens = await Promise.all(
@@ -224,13 +215,12 @@ export function createPollingIndexer<
         const fetched = await fetch.call(self);
         if (!fetched) console.log(`[${name}] Fetcher skips. Move on.`);
         else {
-          let tasks: Task[];
-          if (tasksConcurrency) {
-            tasks = [];
-            for (const task of fetched.tasks)
-              if (!inQueue.has(task.id)) tasks.push(task);
-          } else {
-            tasks = fetched.tasks;
+          const tasks: WithId<Task, TaskId>[] = [];
+          for (const task of fetched.tasks) {
+            const id = $id(task);
+            (task as WithId<Task, TaskId>).id = id;
+            if (!tasksConcurrency || !inQueue.has(id))
+              tasks.push(task as WithId<Task, TaskId>);
           }
           willContinue ||= fetched.continue;
           const fetchedCount = fetched.tasks.length;

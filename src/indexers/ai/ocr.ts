@@ -12,7 +12,7 @@ export type AiOcrContext = {
   aiServerUrl: string;
   ipfsGatewayUrl: string;
 };
-type Task = { id: Cid };
+type Task = { cid: Cid };
 
 const TASKS_PER_FETCH = 40;
 
@@ -38,11 +38,13 @@ export function aiOcrIndexer(
       workers: 1,
     },
 
+    $id: ({ cid }: Task) => cid,
+
     fetch: async function () {
       const sql = this.connections.sql;
       const tasks = await sql<Task[]>`
         SELECT DISTINCT
-          pm.media_cid AS id
+          pm.media_cid AS cid
         FROM
           ipfs.project_media pm
         LEFT JOIN ai.ocr ocr
@@ -54,7 +56,7 @@ export function aiOcrIndexer(
       return { tasks, continue: tasks.length >= TASKS_PER_FETCH };
     },
 
-    handle: async function ({ id }: Task) {
+    handle: async function ({ cid }) {
       const {
         connections: { sql },
         context: { aiServerUrl, ipfsGatewayUrl },
@@ -64,30 +66,30 @@ export function aiOcrIndexer(
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
           body: new URLSearchParams({
-            url: `${ipfsGatewayUrl}/ipfs/${id}`,
+            url: `${ipfsGatewayUrl}/ipfs/${cid}`,
           }),
         });
         if (res.ok) {
           const data = await res.json();
           if (data == null)
-            throw new Error(`Response invalid (${id}): ${toJson(data)}`);
+            throw new Error(`Response invalid (${cid}): ${toJson(data)}`);
           await sql`
             INSERT INTO ai.ocr ${sql({
-              mediaCid: id,
+              mediaCid: cid,
               error: null,
               text: data.ocr,
             })}
           `;
-          console.log(`[ai.ocr] OK: ${id}`);
+          console.log(`[ai.ocr] OK: ${cid}`);
         } else {
-          const error = `Response (${id}): ${res.status} - ${
+          const error = `Response (${cid}): ${res.status} - ${
             res.statusText
           }: ${await res.text()}`;
           if (res.status >= 400 && res.status < 500) {
-            console.error(`[ai.ocr] Error ${id}`, error);
+            console.error(`[ai.ocr] Error ${cid}`, error);
             await sql`
               INSERT INTO ai.ocr ${sql({
-                mediaCid: id,
+                mediaCid: cid,
                 error,
                 text: null,
               })}
@@ -95,7 +97,7 @@ export function aiOcrIndexer(
           } else throw new Error(error);
         }
       } catch (e) {
-        console.error(`[ai.ocr] Error ${id}`, e);
+        console.error(`[ai.ocr] Error ${cid}`, e);
         this.retry();
       }
     },

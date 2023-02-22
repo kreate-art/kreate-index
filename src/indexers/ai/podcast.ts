@@ -24,7 +24,7 @@ export type AiPodcastContext = {
   summaryWordsLimit: number;
 };
 type Task = {
-  id: Cid;
+  cid: Cid;
   title: string;
   announcementTitle: string;
   announcementSummary: string;
@@ -72,11 +72,13 @@ export function aiPodcastIndexer(
       workers: CURRENT_CONFIG.workers,
     },
 
+    $id: ({ cid }: Task) => cid,
+
     fetch: async function () {
       const sql = this.connections.sql;
       const tasks = await sql<Task[]>`
         SELECT
-          cid AS id,
+          cid,
           title,
           announcement_title,
           announcement_summary
@@ -101,18 +103,18 @@ export function aiPodcastIndexer(
     },
 
     handle: async function ({
-      id,
+      cid,
       title,
       announcementTitle,
       announcementSummary,
-    }: Task) {
+    }) {
       const {
         connections: { sql, s3 },
         context: { aiServerUrl, s3Bucket, s3Prefix, summaryWordsLimit },
       } = this;
       let error: string | null = null;
       let willRetry = false;
-      const s3Key = `${s3Prefix}${id}.wav`;
+      const s3Key = `${s3Prefix}${cid}.wav`;
       try {
         announcementSummary = normalizeSummary(
           announcementSummary,
@@ -132,16 +134,16 @@ export function aiPodcastIndexer(
         willRetry = true;
 
         if (IS_STAGING) {
-          console.log(`[ai.podcast] Waiting for ${id}.wav to be uploaded.`);
+          console.log(`[ai.podcast] Waiting for ${cid}.wav to be uploaded.`);
           checkExceptions(
             await waitUntilObjectExists(
               { client: s3, maxWaitTime: 60 },
               { Bucket: "teiki-ai", Key: s3Key }
             )
           );
-          console.log(`[ai.podcast] OK: ${id}.wav`);
+          console.log(`[ai.podcast] OK: ${cid}.wav`);
         } else {
-          console.log(`[ai.podcast] TTS: ${id}`);
+          console.log(`[ai.podcast] TTS: ${cid}`);
           const res = await fetch(`${aiServerUrl}/text2speech`, {
             method: "POST",
             headers: {
@@ -168,17 +170,17 @@ export function aiPodcastIndexer(
             },
           });
           upload.done();
-          console.log(`[ai.podcast] Uploaded: ${id}.wav`);
+          console.log(`[ai.podcast] Uploaded: ${cid}.wav`);
         }
       } catch (e) {
-        console.error(`[ai.podcast] Error ${id}`, e);
+        console.error(`[ai.podcast] Error ${cid}`, e);
         error = e instanceof Error ? e.message : e ? toJson(e) : "ERROR";
       }
       if (error) {
         if (willRetry) this.retry();
-        await sql`INSERT INTO ai.podcast ${sql({ cid: id, error })}`;
+        await sql`INSERT INTO ai.podcast ${sql({ cid, error })}`;
       } else {
-        await sql`INSERT INTO ai.podcast ${sql({ cid: id, error: null })}`;
+        await sql`INSERT INTO ai.podcast ${sql({ cid, error: null })}`;
       }
     },
   });

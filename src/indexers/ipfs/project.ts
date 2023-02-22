@@ -14,7 +14,7 @@ import { NonEmpty } from "../../types/typelevel";
 
 // TODO: Proper failures handling
 export type IpfsProjectContext = { ignored: Cid[] };
-type Task = { id: Cid };
+type Task = { cid: Cid };
 
 const TASKS_PER_FETCH = 40;
 const SHA256_BUF_PATTERN = /^sha256:([a-f0-9]{64})$/;
@@ -71,6 +71,8 @@ export function ipfsProjectInfoIndexer(
     connections,
     triggers: { channels: ["ipfs.project_info"] },
 
+    $id: ({ cid }: Task) => cid,
+
     fetch: async function () {
       const {
         connections: { sql },
@@ -78,7 +80,7 @@ export function ipfsProjectInfoIndexer(
       } = this;
       const tasks = await sql<Task[]>`
         SELECT DISTINCT
-          pd.information_cid AS id
+          pd.information_cid AS cid
         FROM
           chain.output out
         INNER JOIN chain.project_detail pd
@@ -93,7 +95,7 @@ export function ipfsProjectInfoIndexer(
       return { tasks, continue: tasks.length >= TASKS_PER_FETCH };
     },
 
-    handle: async function ({ id }: Task) {
+    handle: async function ({ cid }) {
       const {
         connections: { sql, ipfs, notifications, views },
         context: { ignored },
@@ -104,17 +106,17 @@ export function ipfsProjectInfoIndexer(
       // TODO: Error handling?
       try {
         // NOTE: This function is copied from teiki-backend/src/indexer/project-info.ts
-        projectInfo = fromJson(await fetchFromIpfs(ipfs, id));
+        projectInfo = fromJson(await fetchFromIpfs(ipfs, cid));
       } catch (error) {
         // TODO: Better log here
-        console.error("ERROR:", id, error);
-        ignored.push(id);
+        console.error("ERROR:", cid, error);
+        ignored.push(cid);
         return;
       }
 
       const customUrl = nullIfFalsy(projectInfo?.data?.basics?.customUrl);
       const record = {
-        cid: id,
+        cid,
         contents: projectInfo,
         customUrl: customUrl,
         title: nullIfFalsy(projectInfo?.data?.basics?.title),
@@ -128,7 +130,7 @@ export function ipfsProjectInfoIndexer(
         const medias = [];
         for (const mediaCid of Object.values(projectInfo.bufs)) {
           if (!mediaCid) continue;
-          medias.push({ projectCid: id, mediaCid: mediaCid as string });
+          medias.push({ projectCid: cid, mediaCid: mediaCid as string });
         }
         if (medias.length) {
           await sql`
@@ -171,6 +173,8 @@ export function ipfsProjectAnnouncementIndexer(
     connections,
     triggers: { channels: ["ipfs.project_announcement"] },
 
+    $id: ({ cid }: Task) => cid,
+
     fetch: async function () {
       const {
         connections: { sql },
@@ -178,7 +182,7 @@ export function ipfsProjectAnnouncementIndexer(
       } = this;
       const tasks = await sql<Task[]>`
         SELECT DISTINCT
-          pd.last_announcement_cid AS id
+          pd.last_announcement_cid AS cid
         FROM
           chain.output out
         INNER JOIN chain.project_detail pd
@@ -194,14 +198,14 @@ export function ipfsProjectAnnouncementIndexer(
       return { tasks, continue: tasks.length >= TASKS_PER_FETCH };
     },
 
-    handle: async function ({ id }: Task) {
+    handle: async function ({ cid }) {
       const {
         connections: { sql, ipfs, notifications },
         context: { ignored },
       } = this;
       try {
-        const data = fromJson(await fetchFromIpfs(ipfs, id));
-        const record = { cid: id, data };
+        const data = fromJson(await fetchFromIpfs(ipfs, cid));
+        const record = { cid, data };
         // TODO: Error handling?
         await sql`
           INSERT INTO ipfs.project_announcement ${sql(record)}
@@ -209,8 +213,8 @@ export function ipfsProjectAnnouncementIndexer(
         `;
         notifications.notify("ai.project_moderation");
       } catch (error) {
-        console.error("ERROR:", id, error); // TODO: Better log here
-        ignored.push(id);
+        console.error("ERROR:", cid, error); // TODO: Better log here
+        ignored.push(cid);
       }
     },
 
