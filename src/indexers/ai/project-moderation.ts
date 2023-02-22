@@ -126,7 +126,7 @@ export function aiProjectModerationIndexer(
           ) pj
           LEFT JOIN
             ai.project_moderation pm
-          ON pj.id = pm.cid
+          ON pj.cid = pm.cid
           WHERE pm.cid IS NULL
           LIMIT ${TASKS_PER_FETCH}
       `;
