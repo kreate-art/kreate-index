@@ -25,7 +25,7 @@ export type DiscordBotContext = {
   contentModerationChannelId: string;
   shinkaRoleId: string;
 };
-type Task = { id: ProjectId; customUrl: string | null };
+type Task = { projectId: ProjectId; customUrl: string | null };
 
 const TASKS_PER_FETCH = 8;
 
@@ -47,6 +47,8 @@ export function discordProjectAlertIndexer(
     triggers: { channels: ["discord.project_alert"] },
     concurrency: { workers: 1 },
 
+    $id: ({ projectId }: Task) => projectId,
+
     initialize: function () {
       startDiscordBotInteractionListener(this.connections, this.context);
     },
@@ -58,7 +60,7 @@ export function discordProjectAlertIndexer(
       } = this;
       const tasks = await sql<Task[]>`
         SELECT DISTINCT
-          d.project_id as id,
+          d.project_id as project_id,
           pi.custom_url as custom_url
         FROM
           chain.project_detail d
@@ -76,7 +78,7 @@ export function discordProjectAlertIndexer(
       return { tasks, continue: tasks.length >= TASKS_PER_FETCH };
     },
 
-    handle: async function ({ id, customUrl }: Task) {
+    handle: async function ({ projectId, customUrl }) {
       const {
         connections: { sql, discord },
         context: { ignored },
@@ -87,13 +89,13 @@ export function discordProjectAlertIndexer(
         const buttons = new ActionRowBuilder()
           .addComponents(
             new ButtonBuilder()
-              .setCustomId(`block-${id}`)
+              .setCustomId(`block-${projectId}`)
               .setLabel("Block!")
               .setStyle(ButtonStyle.Danger)
           )
           .addComponents(
             new ButtonBuilder()
-              .setCustomId(`unblock-${id}`)
+              .setCustomId(`unblock-${projectId}`)
               .setLabel("Unblock")
               .setStyle(ButtonStyle.Secondary)
           );
@@ -105,7 +107,7 @@ export function discordProjectAlertIndexer(
         assert("send" in channel, `Channel ${channelId} is not sendable`);
         const projectUrl = customUrl
           ? `${TEIKI_HOST}/projects/${customUrl}`
-          : `${TEIKI_HOST}/projects-by-id/${id}`;
+          : `${TEIKI_HOST}/projects-by-id/${projectId}`;
         channel.send({
           content: `New project: ${projectUrl}\n<@&${shinkaRoleId}>`,
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -114,13 +116,13 @@ export function discordProjectAlertIndexer(
 
         // TODO: Error handling?
         await sql`
-          INSERT INTO discord.notified_project ${sql({ projectId: id })}
+          INSERT INTO discord.notified_project ${sql({ projectId })}
             ON CONFLICT DO NOTHING
         `;
       } catch (error) {
         // TODO: Better log here
-        console.error("ERROR:", id, error);
-        ignored.push(id);
+        console.error("ERROR:", projectId, error);
+        ignored.push(projectId);
       }
     },
   });

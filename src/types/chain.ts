@@ -6,8 +6,6 @@ import { Hex, UnixTime } from "@teiki/protocol/types";
 
 export type Lovelace = bigint;
 
-export type WithId<T, I = bigint> = T & { id: I };
-
 // chain.block
 export type ChainBlock = {
   slot: O.Slot;

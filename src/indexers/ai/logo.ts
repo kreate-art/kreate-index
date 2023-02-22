@@ -18,7 +18,7 @@ const S3_KEY_PATTERN = new RegExp(`^${LOGO_S3_PREFIX}\\w+/([a-zA-Z])/`);
 
 export type AiLogoContext = { s3Bucket: string; fetched: Set<ETag> };
 type Task = {
-  id: S3Key;
+  key: S3Key;
   etag?: ETag;
 };
 
@@ -48,6 +48,8 @@ export function aiLogoIndexer(
     },
     concurrency: { workers: 16 },
 
+    $id: ({ key }: Task) => key,
+
     initialize: async function () {
       const sql = this.connections.sql;
       const fetched = this.context.fetched;
@@ -68,27 +70,27 @@ export function aiLogoIndexer(
       return { tasks, continue: false };
     },
 
-    handle: async function ({ id, etag }: Task) {
+    handle: async function ({ key, etag }) {
       const {
         connections: { sql, s3, ipfs },
       } = this;
-      const letter = id.match(S3_KEY_PATTERN)?.[1]?.toUpperCase();
-      if (!letter) throw new Error(`Malformed logo S3 key: ${id}`);
+      const letter = key.match(S3_KEY_PATTERN)?.[1]?.toUpperCase();
+      if (!letter) throw new Error(`Malformed logo S3 key: ${key}`);
 
       const res = await s3.send(
         new S3.GetObjectCommand({
           Bucket: this.context.s3Bucket,
-          Key: id,
+          Key: key,
           IfMatch: etag,
         })
       );
       etag = res.ETag;
       const body = res.Body;
 
-      assert(body != null, `S3 ${id} has no body`);
+      assert(body != null, `S3 ${key} has no body`);
       const { cid } = await ipfs.add(body, { pin: true });
 
-      if (etag == null) console.warn(`[ai.logo] S3 ${id} has no ETag`);
+      if (etag == null) console.warn(`[ai.logo] S3 ${key} has no ETag`);
       else this.context.fetched.add(etag);
       await sql`
         INSERT INTO ai.logo ${sql({ cid, letter, etag })}
@@ -97,7 +99,7 @@ export function aiLogoIndexer(
             etag = EXCLUDED.etag
       `;
 
-      console.log(`[ai.logo] Streamed ${id} => ${cid}`);
+      console.log(`[ai.logo] Streamed ${key} => ${cid}`);
     },
   });
 }
@@ -123,7 +125,8 @@ async function fetchTasksFromS3(
     for (const obj of contents) {
       assert(obj.Key, "S3 Object Key must be defined");
       const etag = obj.ETag;
-      if (etag == null || !fetched.has(etag)) tasks.push({ id: obj.Key, etag });
+      if (etag == null || !fetched.has(etag))
+        tasks.push({ key: obj.Key, etag });
       else skipped++;
     }
     return res.NextContinuationToken;

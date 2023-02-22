@@ -38,7 +38,7 @@ const WEIGHTS = {
 };
 
 // We might need to add more fields, depends on our moderation scope
-type Task<T> = { id: Cid } & T;
+type Task<T> = { cid: Cid } & T;
 
 // TODO: Proper type
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -100,6 +100,8 @@ export function aiProjectModerationIndexer(
       workers: 1,
     },
 
+    $id: ({ cid }: Task<ProjectInfo | ProjectAnnouncement>) => cid,
+
     fetch: async function () {
       const sql = this.connections.sql;
 
@@ -107,7 +109,7 @@ export function aiProjectModerationIndexer(
         SELECT * FROM
           (
             SELECT
-              pi.cid AS id,
+              pi.cid AS cid,
               pi.title AS title,
               pi.slogan AS slogan,
               pi.summary AS summary,
@@ -131,7 +133,7 @@ export function aiProjectModerationIndexer(
 
       const tasksProjectAnnouncement = await sql<Task<ProjectAnnouncement>[]>`
         SELECT
-          pa.cid AS id,
+          pa.cid AS cid,
           (pa.data -> 'data') AS announcement
         FROM
           ipfs.project_announcement pa
@@ -149,10 +151,7 @@ export function aiProjectModerationIndexer(
       };
     },
 
-    handle: async function ({
-      id,
-      ...data
-    }: Task<ProjectInfo | ProjectAnnouncement>) {
+    handle: async function ({ cid, ...data }) {
       const {
         connections: { sql },
         context: { aiServerUrl },
@@ -166,7 +165,7 @@ export function aiProjectModerationIndexer(
           );
         } catch (error) {
           console.error(
-            `[ai.content_moderation] Failed to extract text from description: ${id}`,
+            `[ai.content_moderation] Failed to extract text from description: ${cid}`,
             error
           );
         }
@@ -183,14 +182,14 @@ export function aiProjectModerationIndexer(
           ].join("\n");
         } catch (error) {
           console.error(
-            `[ai.content_moderation] Failed to extract text from announcement: ${id}`,
+            `[ai.content_moderation] Failed to extract text from announcement: ${cid}`,
             error
           );
         }
       }
 
       const { labels, error } = await callContentModeration(
-        id,
+        cid,
         { ...data, description, announcement },
         aiServerUrl
       );
@@ -198,7 +197,7 @@ export function aiProjectModerationIndexer(
       if (error == null) {
         await sql`
           INSERT INTO ai.project_moderation ${sql({
-            cid: id,
+            cid,
             error: null,
             ...Object.fromEntries(
               LABELS.map((label) => [label, labels.get(label) ?? 0])
@@ -210,7 +209,7 @@ export function aiProjectModerationIndexer(
         // TODO: We will re-enable storing errors later
         // await sql`
         //   INSERT INTO ai.project_moderation ${sql({
-        //     id,
+        //     cid,
         //     error: res.error ?? "tags are unexpectedly empty",
         //   })}
         // `;
@@ -220,7 +219,7 @@ export function aiProjectModerationIndexer(
 }
 
 async function callContentModeration(
-  id: Cid,
+  cid: Cid,
   sections: Partial<Sections<ProjectInfo> & Sections<ProjectAnnouncement>>,
   aiServerUrl: string
 ): Promise<ModerationResult> {
@@ -247,9 +246,9 @@ async function callContentModeration(
         }: ${await res.text()}`;
       }
     }
-    console.log(`[ai.project_moderation] OK: ${id}`);
+    console.log(`[ai.project_moderation] OK: ${cid}`);
   } catch (e) {
-    console.error(`[ai.project_moderation] Error ${id}`, e);
+    console.error(`[ai.project_moderation] Error ${cid}`, e);
     error = e instanceof Error ? e.message : e ? toJson(e) : "ERROR";
   }
   return { labels, error };

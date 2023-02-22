@@ -15,13 +15,8 @@ import {
 import { Connections } from "../../connections";
 import { Sql } from "../../db";
 import prexit from "../../prexit";
-import {
-  ChainBlock,
-  ChainOutput,
-  ChainScript,
-  WithId,
-} from "../../types/chain";
-import { MaybePromise, NonEmpty } from "../../types/typelevel";
+import { ChainBlock, ChainOutput, ChainScript } from "../../types/chain";
+import { MaybePromise, NonEmpty, WithId } from "../../types/typelevel";
 import { $setup, ErrorHandler, queueCatch, Setup } from "../base";
 
 import {
