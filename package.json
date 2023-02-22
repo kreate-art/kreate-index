@@ -22,8 +22,8 @@
     "typecheck:watch": "tsc --noEmit --strict --watch"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.272.0",
-    "@aws-sdk/lib-storage": "^3.272.0",
+    "@aws-sdk/client-s3": "^3.276.0",
+    "@aws-sdk/lib-storage": "^3.276.0",
     "@cardano-ogmios/client": "^5.6.0",
     "@teiki/protocol": "github:teiki-network/teiki-protocol#6e9ab38cdcec2f5170d0906746be31041b64457a",
     "discord.js": "14.7.1",
