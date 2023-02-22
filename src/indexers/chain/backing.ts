@@ -156,30 +156,27 @@ export const event = $.event(
     );
     const message = extractCip20Message(tx)?.join("\n") || null;
 
-    const unbackResult = await sql<
-      { projectId: Hex; totalAmount: Lovelace; actorAddress: Address }[]
+    const unbackRows = await sql<
+      { projectId: Hex; amount: Lovelace; address: Address }[]
     >`
       SELECT
-        SUM(b.backing_amount)::bigint AS total_amount,
+        SUM(b.backing_amount)::bigint AS amount,
         b.project_id,
-        b.backer_address AS actor_address
+        b.backer_address AS address
       FROM chain.backing b
-      INNER JOIN chain.output o ON b.id = o.id
+        INNER JOIN chain.output o ON b.id = o.id
       WHERE (o.tx_id, o.tx_ix) IN ${sql(
-        tx.body.inputs.map((input) => sql([input.txId, input.index])) // @sk-shishi
+        tx.body.inputs.map((input) => sql([input.txId, input.index]))
       )}
       GROUP BY
         (b.project_id, b.backer_address)
     `;
 
     const actionRef = new Map<string, { unback: Lovelace; back: Lovelace }>();
-    unbackResult.forEach((value) => {
-      const tupleKey = `${value.projectId}|${value.actorAddress}`;
-      actionRef.set(tupleKey, {
-        unback: value.totalAmount,
-        back: 0n,
-      });
-    });
+    for (const row of unbackRows) {
+      const key = `${row.projectId}|${row.address}`;
+      actionRef.set(key, { unback: row.amount, back: 0n });
+    }
 
     if (indicies != null) {
       // Since backers can unback and back in the same transaction
@@ -200,11 +197,12 @@ export const event = $.event(
         );
         const projectId = backingDatum.projectId.id;
         const backingAmount = output.value.lovelace;
-        const tupleKey = `${projectId}|${backerAddress}`;
-        let ref = actionRef.get(tupleKey);
-        if (ref == null) {
+
+        const key = `${projectId}|${backerAddress}`;
+        let ref = actionRef.get(key);
+        if (!ref) {
           ref = { unback: 0n, back: 0n };
-          actionRef.set(tupleKey, ref);
+          actionRef.set(key, ref);
         }
         ref.back += backingAmount;
 
@@ -219,15 +217,18 @@ export const event = $.event(
           },
         ];
       });
-      if (!backings.length) console.warn("there is no valid backing");
-      else await sql`INSERT INTO chain.backing ${sql(backings)}`;
+      if (backings.length)
+        await sql`INSERT INTO chain.backing ${sql(backings)}`;
+      else console.warn("there is no valid backing");
     }
 
-    for (const [rawKey, value] of actionRef.entries()) {
-      const [projectId, actorAddress] = rawKey.split("|");
+    const backingActions: ChainBackingAction[] = [];
+    for (const [key, value] of actionRef.entries()) {
+      const [projectId, actorAddress] = key.split("|");
       const delta = value.back - value.unback;
       const action = delta > 0n ? "back" : "unback";
-      const backingAction: ChainBackingAction = {
+
+      backingActions.push({
         action,
         projectId,
         actorAddress,
@@ -236,9 +237,12 @@ export const event = $.event(
         message,
         slot,
         txId: tx.id,
-      };
-      await sql`INSERT INTO chain.backing_action ${sql(backingAction)}`;
+      });
     }
+    if (backingActions.length)
+      await sql`INSERT INTO chain.backing_action ${sql(backingActions)}`;
+    else console.warn("there is no backing action");
+
     driver.refresh("views.project_summary");
   }
 );
