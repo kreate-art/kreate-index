@@ -60,14 +60,22 @@ export function createBlockIngestor() {
       // So the next restart wouldn't reprocess this block
       if (inSync && isRelevant) lastFlush = 0;
     },
-    rollBackward: function (point: WithTime<O.Point> | O.Origin): void {
+    rollBackward: function (
+      point: WithTime<O.Point> | O.Origin,
+      tip?: O.TipOrOrigin
+    ): void {
       lastDoneBlock = null;
       this.flush();
       lastFlush = 0;
       if (point === "origin") console.log("<- Origin");
       else {
         const { slot, hash, time } = point;
-        console.log(`<- ${slot} | ${hash} | ${new Date(time).toISOString()}`);
+        const isAtTip =
+          tip && tip !== "origin" && slot === tip.slot && hash === tip.hash;
+        console.log(
+          `<- ${slot} | ${hash} | ${new Date(time).toISOString()}` +
+            (isAtTip ? " ($)" : "")
+        );
       }
     },
     set inSync(state: boolean) {

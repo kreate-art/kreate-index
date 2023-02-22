@@ -505,8 +505,9 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
         await driver._finally();
       }
       if (inSync && time >= this.nextBlockGc) {
-        const res = await sqlDeleteDetachedChainBlock(sql);
-        console.log(`// GC detached blocks: ${res.count}`);
+        const count = await gcDetachedBlocks(sql);
+        if (count == null) console.warn("// GC failed...");
+        else console.log(`// GC detached blocks: ${count}`);
         this.nextBlockGc = time + CHAIN_BLOCK_GC_INTERVAL;
       }
       if (inSync || time >= this.nextChasingBatchFlush) {
@@ -538,7 +539,7 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
   }
 
   private async rollBackward(
-    { point }: O.RollBackward["RollBackward"],
+    { point, tip }: O.RollBackward["RollBackward"],
     requestNext: () => void
   ) {
     requestNext();
@@ -550,14 +551,14 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
     const connections = this.connections;
     if (point === "origin") {
       await this.reloadSlotTimeInterpreter();
-      this.blockIngestor.rollBackward("origin");
+      this.blockIngestor.rollBackward("origin", tip);
     } else {
       const { slot, hash } = point;
       let interpreter = connections.slotTimeInterpreter;
       if (slot < interpreter.ledgerTipSlot)
         interpreter = await this.reloadSlotTimeInterpreter();
       const time = interpreter.slotToAbsoluteTime(slot);
-      this.blockIngestor.rollBackward({ slot, hash, time });
+      this.blockIngestor.rollBackward({ slot, hash, time }, tip);
     }
     const {
       context,
@@ -755,21 +756,6 @@ async function sqlDeleteChainBlockAfter(sql: Sql, slot: O.Slot) {
   return sql`DELETE FROM chain.block WHERE slot > ${slot}`;
 }
 
-async function sqlDeleteDetachedChainBlock(sql: Sql) {
-  return sql`
-    DELETE FROM chain.block b
-    WHERE
-      NOT EXISTS (
-        SELECT FROM chain.output o
-        WHERE o.created_slot = b.slot
-      ) AND
-      NOT EXISTS (
-        SELECT FROM chain.output o
-        WHERE o.spent_slot = b.slot
-      );
-  `;
-}
-
 async function sqlInsertChainOutputs(
   sql: Sql,
   outputs: NonEmpty<ChainOutput[]>
@@ -788,4 +774,43 @@ async function sqlInsertChainScripts(
     INSERT INTO chain.script ${sql(scripts)}
       ON CONFLICT DO NOTHING
   `;
+}
+
+async function gcDetachedBlocks(sql: Sql) {
+  const references = await sql<
+    { schema: string; table: string; fk: string; pk: string }[]
+  >`
+    SELECT
+      kcu.table_schema AS schema,
+      kcu.table_name AS table,
+      kcu.column_name AS fk,
+      rel_kcu.column_name AS pk
+    FROM
+      information_schema.table_constraints tco
+      INNER JOIN information_schema.key_column_usage kcu ON tco.constraint_schema = kcu.constraint_schema
+        AND tco.constraint_name = kcu.constraint_name
+      INNER JOIN information_schema.referential_constraints rco ON tco.constraint_schema = rco.constraint_schema
+        AND tco.constraint_name = rco.constraint_name
+      INNER JOIN information_schema.key_column_usage rel_kcu ON rco.unique_constraint_schema = rel_kcu.constraint_schema
+        AND rco.unique_constraint_name = rel_kcu.constraint_name
+    WHERE
+      tco.constraint_type = 'FOREIGN KEY'
+      AND rel_kcu.table_schema = 'chain'
+      AND rel_kcu.table_name = 'block'
+  `;
+  if (!references.length) return null;
+
+  const res = await sql`
+    DELETE FROM chain.block block
+    WHERE NOT EXISTS (
+      SELECT WHERE FALSE
+      ${references.map(
+        ({ schema, table, fk, pk }) => sql`
+          UNION SELECT FROM ${sql(schema)}.${sql(table)} link
+            WHERE link.${sql(fk)} = block.${sql(pk)}
+      `
+      )}
+    )
+  `;
+  return res.count;
 }
