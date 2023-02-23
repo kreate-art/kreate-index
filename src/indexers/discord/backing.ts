@@ -7,7 +7,7 @@ import { assert } from "@teiki/protocol/utils";
 import { sqlNotIn } from "../../db/fragments";
 import { $setup } from "../../framework/base";
 import { createPollingIndexer, PollingIndexer } from "../../framework/polling";
-import { BackingActionType } from "../../types/action";
+import { BackingActionType } from "../../types/backing";
 
 import { shortenNumber } from "./utils";
 
@@ -71,7 +71,7 @@ export function discordBackingAlertIndexer(
           ON (dba.tx_id, dba.project_id, dba.actor_address)
                = (ba.tx_id, ba.project_id, ba.actor_address)
         WHERE
-          dba.project_id IS NULL
+          dba.tx_id IS NULL
           AND ${sqlNotIn(
             sql,
             "(ba.tx_id, ba.project_id, ba.actor_address)",
@@ -85,13 +85,20 @@ export function discordBackingAlertIndexer(
       return { tasks, continue: tasks.length >= TASKS_PER_FETCH };
     },
 
-    handle: async function ({ txId, projectId, actorAddress, amount, action }) {
+    handle: async function ({
+      id,
+      txId,
+      projectId,
+      actorAddress,
+      amount,
+      action,
+    }) {
       const {
         connections: { sql, discord },
         context: { ignored },
       } = this;
       try {
-        const { contentModerationChannelId: channelId } = this.context;
+        const { notificationChannelId: channelId } = this.context;
         const embed = new EmbedBuilder()
           .setColor(0x006e46)
           .setTitle(action)
@@ -118,7 +125,6 @@ export function discordBackingAlertIndexer(
         `;
       } catch (error) {
         // TODO: Better log here
-        const id = `${txId}|${projectId}|${actorAddress}`;
         console.error("ERROR:", id, error);
         ignored.push(id);
       }
