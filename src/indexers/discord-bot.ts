@@ -31,9 +31,9 @@ const TASKS_PER_FETCH = 8;
 
 discordProjectAlertIndexer.setup = $setup(async ({ sql }) => {
   await sql`
-    -- TODO: Rename this table to: discord.project_alert
-    CREATE TABLE IF NOT EXISTS discord.notified_project (
-      project_id text PRIMARY KEY
+    CREATE TABLE IF NOT EXISTS discord.project_alert (
+      project_id text PRIMARY KEY,
+      completed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `;
 });
@@ -65,13 +65,13 @@ export function discordProjectAlertIndexer(
         FROM
           chain.project_detail d
         LEFT JOIN
-          discord.notified_project np
-          ON np.project_id = d.project_id
+          discord.project_alert dpa
+          ON dpa.project_id = d.project_id
         INNER JOIN
           ipfs.project_info pi
           ON d.information_cid = pi.cid
         WHERE
-          np.project_id IS NULL
+          dpa.project_id IS NULL
           AND ${sqlNotIn(sql, "d.project_id", ignored)}
         LIMIT ${TASKS_PER_FETCH};
       `;
@@ -116,7 +116,7 @@ export function discordProjectAlertIndexer(
 
         // TODO: Error handling?
         await sql`
-          INSERT INTO discord.notified_project ${sql({ projectId })}
+          INSERT INTO discord.project_alert ${sql({ projectId })}
             ON CONFLICT DO NOTHING
         `;
       } catch (error) {
