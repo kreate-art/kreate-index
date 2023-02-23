@@ -21,7 +21,7 @@ import {
   setupViews,
 } from "./indexers/schema";
 import prexit from "./prexit";
-import { MaybePromise } from "./types/typelevel";
+import { MaybePromise, objectKeys } from "./types/typelevel";
 
 // Cleanups
 const shutdowns: (() => MaybePromise<void>)[] = [];
@@ -182,15 +182,13 @@ const AllIndexers = {
   ),
 } as const;
 
+const AllIndexerKeys = objectKeys(AllIndexers);
+
 const DisabledIndexers: Partial<Record<config.Env, string[]>> = {
-  development: [
-    "ai.logo",
-    "ai.podcast",
-    "ai.ocr",
-    "ai.project_moderation",
-    "discord.project_alert",
-  ],
-  testnet: ["discord.project_alert"],
+  development: AllIndexerKeys.filter(
+    (k) => k.startsWith("ai.") || k.startsWith("discord.")
+  ),
+  testnet: AllIndexerKeys.filter((k) => k.startsWith("discord.")),
 };
 const disabled = DisabledIndexers[config.ENV] ?? [];
 
@@ -206,7 +204,7 @@ if (!args.length) {
   process.exit(1);
 }
 
-const indexers: Indexer[] = [];
+const indexers: [string, Indexer][] = [];
 const includesAll = args.includes("all");
 if (includesAll) {
   for (const name of Object.keys(AllIndexers))
@@ -216,7 +214,16 @@ if (includesAll) {
     else args.push(name);
 }
 let willSetup = false;
-const sorted = Array.from(new Set(args))
+const expandedArgs = args.flatMap((arg) => {
+  if (arg.endsWith(".")) {
+    const expanded = AllIndexerKeys.filter((k) => k.startsWith(arg));
+    if (!expanded.length) throw new Error(`No indexer with prefix: ${arg}`);
+    return expanded;
+  } else {
+    return [arg];
+  }
+});
+const sorted = Array.from(new Set(expandedArgs))
   .map((name): [number, string] => [
     Object.keys(AllIndexers).indexOf(name),
     name,
@@ -225,8 +232,11 @@ const sorted = Array.from(new Set(args))
 for (const [index, name] of sorted) {
   if (name === "setup" || name === "all") willSetup = true;
   else if (index < 0) throw new Error(`Unexpected indexer: ${name}`);
-  else indexers.push(AllIndexers[name as keyof typeof AllIndexers]);
+  else {
+    indexers.push([name, AllIndexers[name as keyof typeof AllIndexers]]);
+  }
 }
+for (const [name, _] of indexers) console.log(`% ${name}`);
 
 const notifications = await connections.provideOne("notifications");
 notifications.listen(
@@ -257,7 +267,7 @@ if (willSetup) {
 
 const RUN_AT = Date.now();
 if (indexers.length)
-  for (const indexer of indexers) shutdowns.push(await indexer.run());
+  for (const [_, indexer] of indexers) shutdowns.push(await indexer.run());
 else {
   console.warn("No indexer specified, I'm done!");
   prexit.exit0();

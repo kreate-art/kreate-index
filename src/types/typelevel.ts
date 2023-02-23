@@ -14,6 +14,9 @@ type Entries<T> = {
 export const objectEntries = <T extends object>(obj: T) =>
   Object.entries(obj) as Entries<T>;
 
+export const objectKeys = <T extends object>(obj: T) =>
+  Object.keys(obj) as (keyof T)[];
+
 export function noop() {
   // Ignored
 }
