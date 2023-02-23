@@ -1,9 +1,10 @@
-import { EmbedBuilder } from "discord.js";
-import { Address, Lovelace } from "lucid-cardano";
+import { ActionRowBuilder, ButtonBuilder, EmbedBuilder } from "discord.js";
+import { Address, Lovelace, UnixTime } from "lucid-cardano";
 
 import { Hex } from "@teiki/protocol/types";
 import { assert } from "@teiki/protocol/utils";
 
+import { EXPLORER_URL, TEIKI_HOST } from "../../config";
 import { sqlNotIn } from "../../db/fragments";
 import { $setup } from "../../framework/base";
 import { createPollingIndexer, PollingIndexer } from "../../framework/polling";
@@ -20,6 +21,9 @@ type Task = {
   actorAddress: Address;
   amount: Lovelace;
   action: BackingActionType;
+  message: string;
+  time: UnixTime;
+  projectTitle: string;
 };
 type BackingAlertKey = string; // txId|projectId|actorAddress
 type DiscordAlertContext$Backing = DiscordAlertContext & {
@@ -63,13 +67,26 @@ export function discordBackingAlertIndexer(
           ba.project_id,
           ba.actor_address,
           ba.action,
-          ba.amount
+          ba.amount,
+          ba.message,
+          ba.time,
+          pi.title as project_title
         FROM
           chain.backing_action ba
         LEFT JOIN
           discord.backing_alert dba
           ON (dba.tx_id, dba.project_id, dba.actor_address)
                = (ba.tx_id, ba.project_id, ba.actor_address)
+        INNER JOIN (
+          SELECT
+            *
+          FROM
+            chain.project_detail pd
+            INNER JOIN chain.output o ON pd.id = o.id
+          WHERE
+            o.spent_slot IS NULL
+        ) AS _pd ON _pd.project_id = ba.project_id
+        INNER JOIN ipfs.project_info pi ON pi.cid = _pd.information_cid
         WHERE
           dba.tx_id IS NULL
           AND ${sqlNotIn(
@@ -92,28 +109,62 @@ export function discordBackingAlertIndexer(
       actorAddress,
       amount,
       action,
+      message,
+      time,
+      projectTitle,
     }) {
       const {
         connections: { sql, discord },
-        context: { ignored },
+        context: { network, ignored },
       } = this;
       try {
         const { notificationChannelId: channelId } = this.context;
+        // Limited at 256 characters
+        const formattedProjectTitle = projectTitle.replace(
+          /(.{200})..+/,
+          "$1..."
+        );
         const embed = new EmbedBuilder()
-          .setColor(0x006e46)
-          .setTitle(action)
-          .addFields({ name: "Backer", value: actorAddress })
-          .addFields({ name: "Project ID", value: projectId })
+          .setColor(action === "back" ? 0x006e46 : 0xff7a00)
+          .setTitle(`${formattedProjectTitle} has just been ${action}ed`)
           .addFields({
             name: "Amount",
             value: `${shortenNumber(amount, { shift: -6 })} ₳`,
-          });
+            inline: true,
+          })
+          .addFields({
+            name: "Message",
+            value: message || "-",
+            inline: true,
+          })
+          .addFields({ name: "Backer", value: actorAddress, inline: false })
+          .setTimestamp(time);
+
+        const links = new ActionRowBuilder()
+          .addComponents(
+            new ButtonBuilder()
+              .setStyle(5)
+              .setLabel("View project")
+              .setURL(`${TEIKI_HOST}/projects-by-id/${projectId}`)
+          )
+          .addComponents(
+            new ButtonBuilder()
+              .setStyle(5)
+              .setLabel("View transaction")
+              .setURL(
+                `https://${
+                  network === "mainnet" ? "" : `${network}.`
+                }${EXPLORER_URL}/tx/${txId}`
+              )
+          );
 
         const channel = await discord.channels.fetch(channelId);
         assert(channel, `Channel ${channelId} not found`);
         assert("send" in channel, `Channel ${channelId} is not sendable`);
         channel.send({
           embeds: [embed],
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          components: [links as any],
         });
 
         // TODO: Error handling?

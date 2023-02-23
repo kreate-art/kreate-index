@@ -1,5 +1,6 @@
 import { Events } from "discord.js";
 
+import { Network } from "../../config";
 import { Connections } from "../../connections";
 import { VitalConnections } from "../../framework/polling";
 
@@ -9,6 +10,7 @@ export type ConnectionsWithDiscord = VitalConnections & Connections<"discord">;
 export type DiscordAlertContext = {
   notificationChannelId: string;
   shinkaRoleId: string;
+  network: Network;
 };
 
 // TODO: This function shouldn't be called directly by any indexer.
