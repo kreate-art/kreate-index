@@ -49,7 +49,7 @@ export const event = $.event(
       );
 
       const registry = protocolParams.registry;
-      context.staking.register(
+      context.staking.watch(
         registry.protocolStakingValidator.script.hash,
         "Script"
       );

@@ -296,7 +296,7 @@ export const projectScriptEvent = $.event<"project_script">(
       return;
     }
     for (const { stakingScriptHash } of projectScripts)
-      staking.register(stakingScriptHash, "Script");
+      staking.watch(stakingScriptHash, "Script");
     await sql`INSERT INTO chain.project_script ${sql(projectScripts)}`;
   }
 );
