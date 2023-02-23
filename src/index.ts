@@ -176,7 +176,7 @@ const AllIndexers = {
       const cc = config.discord();
       return {
         ignored: [],
-        contentModerationChannelId: cc.DISCORD_CONTENT_MODERATION_CHANNEL_ID,
+        notificationChannelId: cc.DISCORD_CONTENT_MODERATION_CHANNEL_ID,
         shinkaRoleId: cc.DISCORD_SHINKA_ROLE_ID,
       };
     }
@@ -188,7 +188,7 @@ const AllIndexers = {
       const cc = config.discord();
       return {
         ignored: [],
-        contentModerationChannelId: cc.DISCORD_CONTENT_MODERATION_CHANNEL_ID,
+        notificationChannelId: cc.DISCORD_BACKING_ALERT_CHANNEL_ID,
         shinkaRoleId: cc.DISCORD_SHINKA_ROLE_ID,
       };
     }

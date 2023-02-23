@@ -92,8 +92,7 @@ export function discordProjectAlertIndexer(
               .setStyle(ButtonStyle.Secondary)
           );
 
-        const { contentModerationChannelId: channelId, shinkaRoleId } =
-          this.context;
+        const { notificationChannelId: channelId, shinkaRoleId } = this.context;
         const channel = await discord.channels.fetch(channelId);
         assert(channel, `Channel ${channelId} not found`);
         assert("send" in channel, `Channel ${channelId} is not sendable`);

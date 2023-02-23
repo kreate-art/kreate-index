@@ -43,11 +43,11 @@ type PollingIndexParams<Context, Connections extends VitalConnections, Task> = {
   ) => MaybePromise<{ tasks: Task[]; continue: boolean } | null>;
   handle?: (
     this: PollingThis<Context, Connections>,
-    task: Task
+    task: WithId<Task, TaskId>
   ) => MaybePromise<void>;
   batch?: (
     this: PollingThis<Context, Connections>,
-    tasks: NonEmpty<Task[]>
+    tasks: NonEmpty<WithId<Task, TaskId>[]>
   ) => MaybePromise<void>;
   triggers: {
     channels?: string[];

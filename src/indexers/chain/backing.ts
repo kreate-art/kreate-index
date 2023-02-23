@@ -9,7 +9,7 @@ import { assert } from "@teiki/protocol/utils";
 
 import { $handlers } from "../../framework/chain";
 import { prettyOutRef } from "../../framework/chain/conversions";
-import { ActionTypes } from "../../types/action";
+import { BackingActionType, BackingActionTypes } from "../../types/backing";
 import { Lovelace } from "../../types/chain";
 import { NonEmpty } from "../../types/typelevel";
 
@@ -27,7 +27,7 @@ export type ChainBacking = {
 };
 
 export type ChainBackingAction = {
-  action: (typeof ActionTypes)[number];
+  action: BackingActionType;
   projectId: Hex;
   actorAddress: Address;
   amount: Lovelace;
@@ -67,7 +67,7 @@ export const setup = $.setup(async ({ sql }) => {
     DO $$ BEGIN
       IF to_regtype('chain.backing_action_type') IS NULL THEN
         CREATE TYPE chain.backing_action_type AS ENUM (${sql.unsafe(
-          ActionTypes.map((a) => `'${a}'`).join(", ")
+          BackingActionTypes.map((a) => `'${a}'`).join(", ")
         )});
       END IF;
     END $$
