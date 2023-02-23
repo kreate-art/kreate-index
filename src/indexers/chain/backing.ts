@@ -9,6 +9,7 @@ import { assert } from "@teiki/protocol/utils";
 
 import { $handlers } from "../../framework/chain";
 import { prettyOutRef } from "../../framework/chain/conversions";
+import { ActionTypes } from "../../types/action";
 import { Lovelace } from "../../types/chain";
 import { NonEmpty } from "../../types/typelevel";
 
@@ -24,8 +25,6 @@ export type ChainBacking = {
   backedAt: UnixTime;
   unbackedAt: UnixTime | null;
 };
-
-const ActionTypes = ["back", "unback", "claim_rewards", "migrate"] as const;
 
 export type ChainBackingAction = {
   action: (typeof ActionTypes)[number];
@@ -238,9 +237,10 @@ export const event = $.event(
         txId,
       });
     }
-    if (backingActions.length)
+    if (backingActions.length) {
       await sql`INSERT INTO chain.backing_action ${sql(backingActions)}`;
-    else console.warn("there is no backing action");
+      driver.notify("discord.backing_alert");
+    } else console.warn("there is no backing action");
 
     driver.refresh("views.project_summary");
   }

@@ -9,7 +9,8 @@ import { aiOcrIndexer } from "./indexers/ai/ocr";
 import { aiPodcastIndexer } from "./indexers/ai/podcast";
 import { aiProjectModerationIndexer } from "./indexers/ai/project-moderation";
 import { getChainIndexer } from "./indexers/chain";
-import { discordProjectAlertIndexer } from "./indexers/discord-bot";
+import { discordBackingAlertIndexer } from "./indexers/discord/backing";
+import { discordProjectAlertIndexer } from "./indexers/discord/project";
 import {
   ipfsProjectAnnouncementIndexer,
   ipfsProjectInfoIndexer,
@@ -170,6 +171,18 @@ const AllIndexers = {
   ),
   "discord.project_alert": wrapPollingIndexer(
     discordProjectAlertIndexer,
+    ["sql", "discord", "notifications"],
+    () => {
+      const cc = config.discord();
+      return {
+        ignored: [],
+        contentModerationChannelId: cc.DISCORD_CONTENT_MODERATION_CHANNEL_ID,
+        shinkaRoleId: cc.DISCORD_SHINKA_ROLE_ID,
+      };
+    }
+  ),
+  "discord.backing_alert": wrapPollingIndexer(
+    discordBackingAlertIndexer,
     ["sql", "discord", "notifications"],
     () => {
       const cc = config.discord();
