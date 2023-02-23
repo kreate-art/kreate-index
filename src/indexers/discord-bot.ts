@@ -147,7 +147,7 @@ function startDiscordBotInteractionListener(
         if (action === "unblock") {
           await sql`
             DELETE FROM
-              ADMIN.blocked_project
+              admin.blocked_project
             WHERE
               project_id = ${projectId};
           `;

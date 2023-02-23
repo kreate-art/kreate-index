@@ -23,7 +23,7 @@ const DEFAULT_INTERVAL = 300_000; // 5 minute
 export type StakingHash = KeyHash | ScriptHash;
 export type StakingType = "Key" | "Script";
 
-export type ChainStaking = {
+export type ChainStakingState = {
   hash: StakingHash;
   address: RewardAddress;
   poolId: PoolId | null;
@@ -36,7 +36,7 @@ export type StakingIndexer = ReturnType<typeof createStakingIndexer>;
 export const setup = $setup(async ({ sql }) => {
   // TODO: Index slot if we want to fine-tune rollback later
   await sql`
-    CREATE TABLE IF NOT EXISTS chain.staking (
+    CREATE TABLE IF NOT EXISTS chain.staking_state (
       hash varchar(56) PRIMARY KEY,
       address TEXT NOT NULL,
       pool_id TEXT,
@@ -168,12 +168,12 @@ export function createStakingIndexer({
             client.ledgerTip(),
             client.delegationsAndRewards(batch),
           ]);
-          const stakings: ChainStaking[] = [];
+          const stakingStates: ChainStakingState[] = [];
           for (const [hash, entry] of Object.entries(response)) {
             const address = registry.get(hash) ?? "";
             if (!address)
               console.warn(`[staking] Address (from) not found for: ${hash}`);
-            stakings.push({
+            stakingStates.push({
               hash,
               address,
               poolId: entry.delegate ?? null,
@@ -186,9 +186,9 @@ export function createStakingIndexer({
               console.log(`[staking] Removed: ${hash} - ${address}`);
             }
           }
-          if (stakings.length) {
+          if (stakingStates.length) {
             await sql`
-              INSERT INTO chain.staking ${sql(stakings)}
+              INSERT INTO chain.staking_state ${sql(stakingStates)}
                 ON CONFLICT (hash) DO UPDATE
                 SET address = EXCLUDED.address,
                     pool_id = EXCLUDED.pool_id,

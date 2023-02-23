@@ -235,11 +235,11 @@ async function setupProjectSummaryMatView(sql: Sql) {
       x_staking AS (
         SELECT
           ps.project_id AS pid,
-          sum(s.rewards)::bigint AS available_funds
+          sum(ss.rewards)::bigint AS available_funds
         FROM
           chain.project_script ps
           INNER JOIN chain.output o ON ps.id = o.id
-          INNER JOIN chain.staking s ON ps.staking_script_hash = s.hash
+          INNER JOIN chain.staking_state ss ON ps.staking_script_hash = ss.hash
         WHERE
           o.spent_slot IS NULL
         GROUP BY
@@ -290,9 +290,9 @@ async function setupProjectSummaryMatView(sql: Sql) {
         coalesce(x_backing.backer_count, 0) AS backer_count,
         coalesce(x_backing.total_backing_amount, 0) AS total_backing_amount,
         coalesce(x_backing.total_backing_amount, 0) + (CASE
-          WHEN (status IN ('closed', 'delisted')) 
+          WHEN (status IN ('closed', 'delisted'))
             THEN 0
-            ELSE coalesce(x_project_related_outputs.total_amount, 0) 
+            ELSE coalesce(x_project_related_outputs.total_amount, 0)
         END) AS total_staking_amount,
         x_project_detail.withdrawn_funds,
         x_project_detail.sponsorship_amount,
