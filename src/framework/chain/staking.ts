@@ -1,7 +1,13 @@
 import { StateQuery } from "@cardano-ogmios/client";
-import { Slot } from "@cardano-ogmios/schema";
+import * as O from "@cardano-ogmios/schema";
 import fastq from "fastq";
-import { KeyHash, ScriptHash, PoolId, RewardAddress } from "lucid-cardano";
+import {
+  KeyHash,
+  PoolId,
+  RewardAddress,
+  ScriptHash,
+  TxHash,
+} from "lucid-cardano";
 import { debounce } from "throttle-debounce";
 
 import { Connections } from "../../connections";
@@ -23,17 +29,69 @@ const DEFAULT_INTERVAL = 300_000; // 5 minute
 export type StakingHash = KeyHash | ScriptHash;
 export type StakingType = "Key" | "Script";
 
+export const ChainStakingActionTypes = [
+  "withdraw",
+  "register",
+  "delegate",
+  "deregister",
+] as const;
+
+export type ChainStakingAction = (typeof ChainStakingActionTypes)[number];
+
+export type ChainStakingActionWithPayload =
+  | { action: "delegate"; payload: { poolId: PoolId } }
+  | { action: "register"; payload: null }
+  | { action: "deregister"; payload: null }
+  | { action: "withdraw"; payload: { amount: Lovelace } };
+
+export type ChainStaking = {
+  hash: StakingHash;
+  slot: O.Slot;
+  txId: TxHash;
+} & ChainStakingActionWithPayload;
+
 export type ChainStakingState = {
   hash: StakingHash;
   address: RewardAddress;
   poolId: PoolId | null;
   rewards: Lovelace;
-  reloadedSlot: Slot;
+  reloadedSlot: O.Slot;
 };
 
 export type StakingIndexer = ReturnType<typeof createStakingIndexer>;
 
 export const setup = $setup(async ({ sql }) => {
+  await sql`
+    DO $$ BEGIN
+      IF to_regtype('chain.staking_action_type') IS NULL THEN
+        CREATE TYPE chain.staking_action_type AS ENUM (${sql.unsafe(
+          ChainStakingActionTypes.map((e) => `'${e}'`).join(", ")
+        )});
+      END IF;
+    END $$
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS chain.staking (
+      id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      hash varchar(56) NOT NULL,
+      action chain.staking_action_type NOT NULL,
+      payload jsonb,
+      slot integer NOT NULL REFERENCES chain.block (slot) ON DELETE CASCADE,
+      tx_id varchar(64) NOT NULL
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS staking_hash_action_index
+      ON chain.staking(hash, action)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS staking_slot_index
+      ON chain.staking(slot)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS staking_tx_id_index
+      ON chain.staking(tx_id)
+  `;
   // TODO: Index slot if we want to fine-tune rollback later
   await sql`
     CREATE TABLE IF NOT EXISTS chain.staking_state (
@@ -206,7 +264,7 @@ export function createStakingIndexer({
       }
     },
     stop,
-    reset: async function () {
+    clear: async function () {
       reloadQueue.pause();
       await reloadQueue.drained();
       registry.clear();
@@ -215,26 +273,47 @@ export function createStakingIndexer({
       toRemove.clear();
       fullReload = false;
       reloadQueue.resume();
-      console.log(`[staking] Reset!`);
+      console.log(`[staking] Clear!`);
     },
-    register: function (hash: StakingHash, type: StakingType) {
+    reboot: async function () {
+      this.clear();
+      const rows = await sql<{ hash: StakingHash }[]>`
+        SELECT
+          hash
+        FROM (
+          SELECT DISTINCT ON (hash)
+            hash,
+            action <> 'deregister' AS is_active
+          FROM
+            chain.staking
+          ORDER BY
+            hash,
+            id DESC
+        ) s
+        WHERE is_active;
+      `;
+      const hashes = rows.map(({ hash }) => hash);
+      this.batchWatch(hashes, "Script");
+      console.log(`[staking] Reboot !!!`);
+    },
+    watch: function (hash: StakingHash, type: StakingType) {
       const address = lucid.utils.credentialToRewardAddress({ type, hash });
       registry.set(hash, address);
       revRegistry.set(address, hash);
-      console.log(`[staking] Registered: (${type}) ${hash} - ${address}`);
+      console.log(`[staking] Watched: (${type}) ${hash} - ${address}`);
     },
-    batchRegister: function (hashes: StakingHash[], type: StakingType) {
+    batchWatch: function (hashes: StakingHash[], type: StakingType) {
       for (const hash of hashes) {
         const address = lucid.utils.credentialToRewardAddress({ type, hash });
         registry.set(hash, address);
         revRegistry.set(address, hash);
       }
-      console.log(`[staking] Registered: A batch of ${hashes.length} ${type}`);
+      console.log(`[staking] Watched: A batch of ${hashes.length} (${type})`);
     },
-    deregister: function (hash: StakingHash): boolean {
+    unwatch: function (hash: StakingHash): boolean {
       if (registry.has(hash)) {
         toRemove.add(hash);
-        console.log(`[staking] Deregistered: ${hash}`);
+        console.log(`[staking] Unwatched: ${hash}`);
         return true;
       } else {
         console.warn(`[staking] Not Found: ${hash}`);
@@ -247,10 +326,10 @@ export function createStakingIndexer({
     fromAddress: function (address: RewardAddress): StakingHash | undefined {
       return revRegistry.get(address);
     },
-    isHashRegistered: function (hash: StakingHash): boolean {
+    isHashWatched: function (hash: StakingHash): boolean {
       return registry.has(hash);
     },
-    isAddressRegistered: function (address: RewardAddress): boolean {
+    isAddressWatched: function (address: RewardAddress): boolean {
       return revRegistry.has(address);
     },
     toggleReloadDynamically(state: boolean) {
@@ -260,42 +339,72 @@ export function createStakingIndexer({
   };
 }
 
-export type Event = {
-  type: "staking";
-  reload: StakingHash[];
-  remove: StakingHash[];
-};
-
-const $ = $handlers<{ staking: StakingIndexer }, Event>();
-
-export const filter = $.filter((params) => {
-  if (!params.inSync) return null;
-  const staking = params.context.staking;
-  const body = params.tx.body;
-  const reload = [];
-  const remove = [];
-  for (const cert of body.certificates) {
-    if ("stakeDelegation" in cert) {
-      const hash = cert.stakeDelegation.delegator;
-      staking.isHashRegistered(hash) && reload.push(hash);
-    } else if ("stakeKeyDeregistration" in cert) {
-      const hash = cert.stakeKeyDeregistration;
-      if (staking.isHashRegistered(hash)) {
-        remove.push(hash);
-        reload.push(hash);
+export const afterBlock = $handlers<{ staking: StakingIndexer }>().afterBlock(
+  async ({
+    context: { staking },
+    connections: { sql },
+    block,
+    inSync,
+    storeBlock,
+  }) => {
+    const events: ChainStaking[] = [];
+    const slot = block.header.slot;
+    for (const tx of block.body) {
+      const txId = tx.id;
+      const txBody = tx.body;
+      const withdrawals = txBody.withdrawals;
+      for (const address in withdrawals) {
+        const hash = staking.fromAddress(address);
+        hash &&
+          events.push({
+            hash,
+            action: "withdraw",
+            payload: { amount: withdrawals[address] },
+            slot,
+            txId,
+          });
+      }
+      for (const cert of txBody.certificates) {
+        if ("stakeKeyRegistration" in cert) {
+          const hash = cert.stakeKeyRegistration;
+          if (staking.isHashWatched(hash))
+            events.push({
+              hash,
+              action: "register",
+              payload: null,
+              slot,
+              txId,
+            });
+        } else if ("stakeDelegation" in cert) {
+          const delegation = cert.stakeDelegation;
+          const hash = delegation.delegator;
+          if (staking.isHashWatched(hash))
+            events.push({
+              hash,
+              action: "delegate",
+              payload: { poolId: delegation.delegatee },
+              slot,
+              txId,
+            });
+        } else if ("stakeKeyDeregistration" in cert) {
+          const hash = cert.stakeKeyDeregistration;
+          if (staking.isHashWatched(hash)) {
+            events.push({
+              hash,
+              action: "deregister",
+              payload: null,
+              slot,
+              txId,
+            });
+            staking.unwatch(hash);
+          }
+        }
       }
     }
-  }
-  for (const address in body.withdrawals) {
-    const hash = staking.fromAddress(address);
-    hash && reload.push(hash);
-  }
-  return reload.length ? [{ type: "staking", reload, remove }] : null;
-});
-
-export const event = $.event(
-  ({ context: { staking }, event: { reload, remove } }) => {
-    for (const hash of remove) staking.deregister(hash);
-    staking.reload(reload);
+    if (events.length) {
+      storeBlock && (await storeBlock());
+      await sql`INSERT INTO chain.staking ${sql(events)}`;
+      if (inSync) staking.reload(events.map((e) => e.hash));
+    }
   }
 );

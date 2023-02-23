@@ -135,7 +135,6 @@ type ChainIndexFilter<TContext, TEvent> = (_: {
   context: TContext;
   block: ChainBlock;
   tx: O.TxBabbage;
-  inSync: boolean;
 }) => MaybePromise<TEvent[] | null>;
 
 type ChainIndexEventHandler<TContext, TEvent> = (_: {
@@ -145,7 +144,6 @@ type ChainIndexEventHandler<TContext, TEvent> = (_: {
   block: ChainBlock;
   tx: O.TxBabbage;
   event: TEvent;
-  inSync: boolean;
 }) => MaybePromise<void>;
 
 type ChainIndexRollbackHandler<TContext> = (_: {
@@ -153,6 +151,21 @@ type ChainIndexRollbackHandler<TContext> = (_: {
   context: TContext;
   point: O.PointOrOrigin;
   action: "begin" | "rollback" | "end";
+}) => MaybePromise<void>;
+
+type ChainIndexOnceInSyncHandler<TContext> = (_: {
+  connections: ChainIndexConnections;
+  context: TContext;
+  point: ChainBlock;
+  tip: O.Tip;
+}) => MaybePromise<void>;
+
+type ChainIndexAfterBlockHandler<TContext> = (_: {
+  connections: ChainIndexConnections;
+  context: TContext;
+  block: O.BlockBabbage;
+  inSync: boolean;
+  storeBlock: (() => Promise<void>) | undefined;
 }) => MaybePromise<void>;
 
 // Blocks are handled sequentially
@@ -172,11 +185,9 @@ type ChainIndexHandlers<TContext, TEvent extends IEvent> = {
   // Rollback Handlers are ran sequentially
   readonly rollbacks: ChainIndexRollbackHandler<TContext>[];
   // Called once
-  readonly onceInSync?: ((_: {
-    connections: ChainIndexConnections;
-    context: TContext;
-    tip: O.Tip;
-  }) => MaybePromise<void>)[];
+  readonly onceInSync?: ChainIndexOnceInSyncHandler<TContext>;
+  // TODO: This is a quick hack to get things going...
+  readonly afterBlock?: ChainIndexAfterBlockHandler<TContext>;
 };
 
 type ChainIndexerStatus = "inactive" | "starting" | "active" | "stopping";
@@ -411,7 +422,7 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
     const {
       connections,
       context,
-      handlers: { filters, events },
+      handlers: { filters, events, afterBlock },
       blockIngestor,
       batch,
       endAt,
@@ -435,8 +446,8 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
       this.inSync = true;
       blockIngestor.inSync = true;
       console.log(`!! NOW IN SYNC !!`);
-      for (const once of this.handlers.onceInSync ?? [])
-        await once({ connections, context, tip });
+      const once = this.handlers.onceInSync;
+      once && (await once({ connections, context, point: cblock, tip }));
     }
 
     const shouldStore = blockIngestor.rollForward(cblock);
@@ -450,55 +461,64 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
           block: cblock,
           connections,
           context,
-          inSync,
         };
         const foundEvents: TEvent[] = [];
         const filterResults = await Promise.all(filters.map((f) => f(params)));
         for (const result of filterResults)
           if (result != null) foundEvents.push(...result);
-        if (!foundEvents.length) continue;
 
-        if (!isBlockStored) {
-          blockIngestor.flush();
-          await sqlInsertChainBlock(sql, cblock);
-          isBlockStored = true;
+        if (foundEvents.length) {
+          if (!isBlockStored) {
+            blockIngestor.flush();
+            await sqlInsertChainBlock(sql, cblock);
+            isBlockStored = true;
+          }
+
+          const driver = createEventDriver(connections, batch, tx, slot);
+          const paramsWithDriver = { ...params, driver };
+
+          await Promise.all(
+            foundEvents.map(async (event) => {
+              const eventType: TEvent["type"] = event.type;
+              const eventHandlers = events[eventType];
+              const eventParams = {
+                event: event as Extract<TEvent, { type: typeof eventType }>,
+                ...paramsWithDriver,
+              };
+              for (const handler of eventHandlers) await handler(eventParams);
+            })
+          );
+
+          // Mark UTxOs as spent
+          await sql`
+            UPDATE
+              chain.output
+            SET
+              spent_slot = ${slot},
+              spent_tx_id = ${tx.id}
+            WHERE
+              (tx_id, tx_ix) IN ${sql(
+                tx.body.inputs.map((input) => sql([input.txId, input.index]))
+              )}
+          `;
+
+          await driver._finally();
         }
-
-        const driver = createEventDriver(connections, batch, tx, slot);
-        const paramsWithDriver = { ...params, driver };
-
-        await Promise.all(
-          foundEvents.map(async (event) => {
-            const eventType: TEvent["type"] = event.type;
-            const eventHandlers = events[eventType];
-            const eventParams = {
-              event: event as Extract<TEvent, { type: typeof eventType }>,
-              ...paramsWithDriver,
-            };
-            for (const handler of eventHandlers) await handler(eventParams);
-          })
-        );
-
-        // TODO: Handle taken collaterals...
-        // Transaction JSON objects from the **Alonzo** era now contains an extra field `inputSource` which a string set to either `inputs` or `collaterals`.
-        // This captures the fact that since the introduction of Plutus scripts in Alonzo, some transactions may be recorded as _failed_ transactions in the ledger.
-        // Those transactions do not successfully spend their inputs but instead, consume their collaterals as an input source to compensate block validators for their work.
-
-        // Mark UTxOs as spent
-        await sql`
-          UPDATE
-            chain.output
-          SET
-            spent_slot = ${slot},
-            spent_tx_id = ${tx.id}
-          WHERE
-            (tx_id, tx_ix) IN ${sql(
-              tx.body.inputs.map((input) => sql([input.txId, input.index]))
-            )}
-        `;
-
-        await driver._finally();
       }
+      afterBlock &&
+        (await afterBlock({
+          connections,
+          context,
+          block,
+          inSync,
+          storeBlock: isBlockStored
+            ? undefined
+            : async () => {
+                blockIngestor.flush();
+                await sqlInsertChainBlock(sql, cblock);
+                isBlockStored = true;
+              },
+        }));
       if (inSync && time >= this.nextBlockGc) {
         const count = await gcDetachedBlocks(sql);
         if (count == null) console.warn("// GC failed...");
@@ -592,6 +612,8 @@ export function $handlers<TContext, TEvent extends IEvent = { type: never }>() {
       fn: ChainIndexEventHandler<TContext, Extract<TEvent, { type: EventType }>>
     ) => fn,
     rollback: (fn: ChainIndexRollbackHandler<TContext>) => fn,
+    onceInSync: (fn: ChainIndexOnceInSyncHandler<TContext>) => fn,
+    afterBlock: (fn: ChainIndexAfterBlockHandler<TContext>) => fn,
   };
 }
 

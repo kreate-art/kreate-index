@@ -34,7 +34,7 @@ export type ChainBackingAction = {
   amount: Lovelace;
   time: UnixTime;
   message: string | null;
-  slot: number;
+  slot: O.Slot;
   txId: TxHash;
 };
 
@@ -68,9 +68,7 @@ export const setup = $.setup(async ({ sql }) => {
     DO $$ BEGIN
       IF to_regtype('chain.backing_action_type') IS NULL THEN
         CREATE TYPE chain.backing_action_type AS ENUM (${sql.unsafe(
-          Object.values(ActionTypes)
-            .map((a) => `'${a}'`)
-            .join(", ")
+          ActionTypes.map((a) => `'${a}'`).join(", ")
         )});
       END IF;
     END $$
@@ -223,6 +221,7 @@ export const event = $.event(
     }
 
     const backingActions: ChainBackingAction[] = [];
+    const txId = tx.id;
     for (const [key, value] of actionRef.entries()) {
       const [projectId, actorAddress] = key.split("|");
       const delta = value.back - value.unback;
@@ -236,7 +235,7 @@ export const event = $.event(
         time, // block time at which executed the action
         message,
         slot,
-        txId: tx.id,
+        txId,
       });
     }
     if (backingActions.length)
