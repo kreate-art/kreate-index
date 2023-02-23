@@ -1,31 +1,23 @@
-import {
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  Events,
-} from "discord.js";
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
 
 import { assert } from "@teiki/protocol/utils";
 
-import { TEIKI_HOST } from "../config";
-import { Connections } from "../connections";
-import { sqlNotIn } from "../db/fragments";
-import { $setup } from "../framework/base";
-import {
-  createPollingIndexer,
-  PollingIndexer,
-  VitalConnections,
-} from "../framework/polling";
+import { TEIKI_HOST } from "../../config";
+import { sqlNotIn } from "../../db/fragments";
+import { $setup } from "../../framework/base";
+import { createPollingIndexer, PollingIndexer } from "../../framework/polling";
 
-// TODO: Proper failures handling
-type ConnectionsWithDiscord = VitalConnections & Connections<"discord">;
+import {
+  ConnectionsWithDiscord,
+  DiscordAlertContext,
+  startDiscordBotInteractionListener,
+} from ".";
+
 type ProjectId = string;
-export type DiscordBotContext = {
-  ignored: ProjectId[];
-  contentModerationChannelId: string;
-  shinkaRoleId: string;
-};
 type Task = { projectId: ProjectId; customUrl: string | null };
+type DiscordAlertContext$Project = DiscordAlertContext & {
+  ignored: ProjectId[];
+};
 
 const TASKS_PER_FETCH = 8;
 
@@ -40,7 +32,7 @@ discordProjectAlertIndexer.setup = $setup(async ({ sql }) => {
 
 export function discordProjectAlertIndexer(
   connections: ConnectionsWithDiscord
-): PollingIndexer<DiscordBotContext> {
+): PollingIndexer<DiscordAlertContext$Project> {
   return createPollingIndexer({
     name: "discord.project_alert",
     connections,
@@ -73,7 +65,7 @@ export function discordProjectAlertIndexer(
         WHERE
           dpa.project_id IS NULL
           AND ${sqlNotIn(sql, "d.project_id", ignored)}
-        LIMIT ${TASKS_PER_FETCH};
+        LIMIT ${TASKS_PER_FETCH}
       `;
       return { tasks, continue: tasks.length >= TASKS_PER_FETCH };
     },
@@ -125,52 +117,5 @@ export function discordProjectAlertIndexer(
         ignored.push(projectId);
       }
     },
-  });
-}
-
-function startDiscordBotInteractionListener(
-  { sql, discord }: ConnectionsWithDiscord,
-  { contentModerationChannelId }: DiscordBotContext
-) {
-  discord.once(Events.ClientReady, async (c) => {
-    console.log(`Logged in as ${c.user.tag}!`);
-  });
-
-  discord.on(Events.InteractionCreate, async (i) => {
-    try {
-      if (i.isButton()) {
-        if (i.channelId !== contentModerationChannelId) return;
-
-        const [action, projectId] = i.customId.split("-");
-        const actionUser = `${i.member?.user.username}#${i.member?.user.discriminator}`;
-
-        if (action === "unblock") {
-          await sql`
-            DELETE FROM
-              admin.blocked_project
-            WHERE
-              project_id = ${projectId};
-          `;
-          await i.update({
-            content: `${i.message.content} \n\n Unblocked by ${actionUser}`,
-            components: i.message.components,
-          });
-        } else if (action === "block") {
-          await sql`
-            INSERT INTO
-              admin.blocked_project ${sql({ projectId })}
-            ON CONFLICT DO NOTHING
-          `;
-          await i.update({
-            content: `${i.message.content} \n\n Blocked by ${actionUser}`,
-            components: i.message.components,
-          });
-        }
-      }
-    } catch (e) {
-      // FIXME: Proper error handling!
-      // We are catching to keep the bot alive.
-      console.log(e);
-    }
   });
 }
