@@ -106,7 +106,7 @@ export function aiProjectModerationIndexer(
       const sql = this.connections.sql;
 
       const tasksProjectInfo = await sql<Task<ProjectInfo>[]>`
-        SELECT * FROM
+        SELECT pj.* FROM
           (
             SELECT
               pi.cid AS cid,
@@ -151,7 +151,7 @@ export function aiProjectModerationIndexer(
       };
     },
 
-    handle: async function ({ cid, ...data }) {
+    handle: async function ({ id: _, cid, ...data }) {
       const {
         connections: { sql },
         context: { aiServerUrl },
