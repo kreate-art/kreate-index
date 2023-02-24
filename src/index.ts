@@ -12,6 +12,7 @@ import { getChainIndexer } from "./indexers/chain";
 import { createDiscordAlertContext } from "./indexers/discord";
 import { discordBackingAlertIndexer } from "./indexers/discord/backing";
 import { discordProjectAlertIndexer } from "./indexers/discord/project";
+import { discordWithdrawFundsAlertIndexer } from "./indexers/discord/withdraw-funds";
 import {
   ipfsProjectAnnouncementIndexer,
   ipfsProjectInfoIndexer,
@@ -186,6 +187,19 @@ const AllIndexers = {
       createDiscordAlertContext(
         config.discord().DISCORD_BACKING_ALERT_CHANNEL_ID
       )
+  ),
+  "discord.withdraw_funds_alert": wrapPollingIndexer(
+    discordWithdrawFundsAlertIndexer,
+    ["sql", "discord", "notifications"],
+    () => {
+      const cc = config.discord();
+      return {
+        ignored: [],
+        notificationChannelId: cc.DISCORD_WITHDRAW_FUNDS_ALERT_CHANNEL_ID,
+        shinkaRoleId: cc.DISCORD_SHINKA_ROLE_ID,
+        cexplorerUrl: config.cardano().CEXPLORER_URL,
+      };
+    }
   ),
 } as const;
 
