@@ -11,6 +11,7 @@ import { aiProjectModerationIndexer } from "./indexers/ai/project-moderation";
 import { getChainIndexer } from "./indexers/chain";
 import { createDiscordAlertContext } from "./indexers/discord";
 import { discordBackingAlertIndexer } from "./indexers/discord/backing";
+import { discordDelegationAlertIndexer } from "./indexers/discord/delegation";
 import { discordProjectAlertIndexer } from "./indexers/discord/project";
 import { discordWithdrawFundsAlertIndexer } from "./indexers/discord/withdraw-funds";
 import {
@@ -194,6 +195,14 @@ const AllIndexers = {
     () =>
       createDiscordAlertContext(
         config.discord().DISCORD_WITHDRAW_FUNDS_ALERT_CHANNEL_ID
+      )
+  ),
+  "discord.delegation_alert": wrapPollingIndexer(
+    discordDelegationAlertIndexer,
+    ["sql", "discord", "notifications"],
+    () =>
+      createDiscordAlertContext(
+        config.discord().DISCORD_DELEGATION_ALERT_CHANNEL_ID
       )
   ),
 } as const;
