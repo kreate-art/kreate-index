@@ -4,7 +4,7 @@ import { Address, Lovelace, UnixTime } from "lucid-cardano";
 import { Hex } from "@teiki/protocol/types";
 import { assert } from "@teiki/protocol/utils";
 
-import { EXPLORER_URL, TEIKI_HOST } from "../../config";
+import { TEIKI_HOST } from "../../config";
 import { sqlNotIn } from "../../db/fragments";
 import { $setup } from "../../framework/base";
 import { createPollingIndexer, PollingIndexer } from "../../framework/polling";
@@ -85,8 +85,8 @@ export function discordBackingAlertIndexer(
             INNER JOIN chain.output o ON pd.id = o.id
           WHERE
             o.spent_slot IS NULL
-        ) AS _pd ON _pd.project_id = ba.project_id
-        INNER JOIN ipfs.project_info pi ON pi.cid = _pd.information_cid
+        ) AS pd ON pd.project_id = ba.project_id
+        INNER JOIN ipfs.project_info pi ON pi.cid = pd.information_cid
         WHERE
           dba.tx_id IS NULL
           AND ${sqlNotIn(
@@ -115,7 +115,7 @@ export function discordBackingAlertIndexer(
     }) {
       const {
         connections: { sql, discord },
-        context: { network, ignored },
+        context: { cexplorerUrl, ignored },
       } = this;
       try {
         const { notificationChannelId: channelId } = this.context;
@@ -151,11 +151,7 @@ export function discordBackingAlertIndexer(
             new ButtonBuilder()
               .setStyle(5)
               .setLabel("View transaction")
-              .setURL(
-                `https://${
-                  network === "mainnet" ? "" : `${network}.`
-                }${EXPLORER_URL}/tx/${txId}`
-              )
+              .setURL(`${cexplorerUrl}/tx/${txId}`)
           );
 
         const channel = await discord.channels.fetch(channelId);

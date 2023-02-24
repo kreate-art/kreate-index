@@ -25,7 +25,6 @@ export type Network = "preview" | "preprod" | "mainnet";
 export const ENV = (process.env.ENV || "development") as Env;
 
 export const TEIKI_HOST = requiredEnv("TEIKI_HOST");
-export const EXPLORER_URL = requiredEnv("EXPLORER_URL");
 
 export function pick<T extends Record<string, unknown>, K extends keyof T>(
   base: T,
@@ -41,7 +40,13 @@ export function cardano() {
     network === "preview" || network === "preprod" || network === "mainnet",
     "Network must be either: preview, preprod, mainnet."
   );
-  return { NETWORK: network as Network };
+  const cexplorerUrl = requiredEnv("CEXPLORER_URL");
+  assert(
+    /^(http|https):\/\/.*[^/]$/.test(cexplorerUrl),
+    "Cexplorer url must starts with " +
+      "'http://' or 'https://' and must not end with '/'"
+  );
+  return { NETWORK: network as Network, CEXPLORER_URL: cexplorerUrl };
 }
 
 export function database() {
