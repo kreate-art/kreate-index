@@ -9,6 +9,7 @@ import { aiOcrIndexer } from "./indexers/ai/ocr";
 import { aiPodcastIndexer } from "./indexers/ai/podcast";
 import { aiProjectModerationIndexer } from "./indexers/ai/project-moderation";
 import { getChainIndexer } from "./indexers/chain";
+import { createDiscordAlertContext } from "./indexers/discord";
 import { discordBackingAlertIndexer } from "./indexers/discord/backing";
 import { discordProjectAlertIndexer } from "./indexers/discord/project";
 import {
@@ -52,7 +53,7 @@ const teikiChainIndexer: Indexer = {
   // TODO: Fix those abstraction leak later...
   setup: getChainIndexer.setup,
   run: async () => {
-    const cc = config.chainIndex();
+    const cc = config.chain();
     const indexer = await getChainIndexer(
       await connections.provide(
         "sql",
@@ -172,28 +173,18 @@ const AllIndexers = {
   "discord.project_alert": wrapPollingIndexer(
     discordProjectAlertIndexer,
     ["sql", "discord", "notifications"],
-    () => {
-      const cc = config.discord();
-      return {
-        ignored: [],
-        notificationChannelId: cc.DISCORD_CONTENT_MODERATION_CHANNEL_ID,
-        shinkaRoleId: cc.DISCORD_SHINKA_ROLE_ID,
-        cexplorerUrl: config.cardano().CEXPLORER_URL,
-      };
-    }
+    () =>
+      createDiscordAlertContext(
+        config.discord().DISCORD_CONTENT_MODERATION_CHANNEL_ID
+      )
   ),
   "discord.backing_alert": wrapPollingIndexer(
     discordBackingAlertIndexer,
     ["sql", "discord", "notifications"],
-    () => {
-      const cc = config.discord();
-      return {
-        ignored: [],
-        notificationChannelId: cc.DISCORD_BACKING_ALERT_CHANNEL_ID,
-        shinkaRoleId: cc.DISCORD_SHINKA_ROLE_ID,
-        cexplorerUrl: config.cardano().CEXPLORER_URL,
-      };
-    }
+    () =>
+      createDiscordAlertContext(
+        config.discord().DISCORD_BACKING_ALERT_CHANNEL_ID
+      )
   ),
 } as const;
 

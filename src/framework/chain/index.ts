@@ -8,10 +8,7 @@ import * as L from "lucid-cardano";
 import { Hex, TimeDifference, UnixTime } from "@teiki/protocol/types";
 import { assert } from "@teiki/protocol/utils";
 
-import {
-  CHAIN_BLOCK_GC_INTERVAL,
-  CHAIN_CHASING_BATCH_INTERVAL,
-} from "../../config";
+import { BLOCK_INGESTION_CONFIG } from "../../config";
 import { Connections } from "../../connections";
 import { Sql } from "../../db";
 import prexit from "../../prexit";
@@ -32,6 +29,9 @@ import {
 } from "./conversions";
 import { BlockIngestor, createBlockIngestor } from "./ingestor";
 import { createSlotTimeInterpreter, SlotTimeInterpreter } from "./time";
+
+const { CHAIN_CHASING_BATCH_INTERVAL, CHAIN_BLOCK_GC_INTERVAL } =
+  BLOCK_INGESTION_CONFIG;
 
 // TODO: Ensure progress
 

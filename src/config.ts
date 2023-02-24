@@ -24,8 +24,6 @@ export type Network = "preview" | "preprod" | "mainnet";
 
 export const ENV = (process.env.ENV || "development") as Env;
 
-export const TEIKI_HOST = requiredEnv("TEIKI_HOST");
-
 export function pick<T extends Record<string, unknown>, K extends keyof T>(
   base: T,
   ...keys: K[]
@@ -34,7 +32,26 @@ export function pick<T extends Record<string, unknown>, K extends keyof T>(
   return Object.fromEntries(entries);
 }
 
-export function cardano() {
+const configs = new Map<string, unknown>();
+
+function config<T>(namespace: string, init: () => T): () => T {
+  return () => {
+    let config = configs.get(namespace);
+    if (config === undefined) {
+      config = init();
+      configs.set(namespace, config);
+    }
+    return config as T;
+  };
+}
+
+export const teiki = config("teiki", () => {
+  return {
+    TEIKI_HOST: requiredEnv("TEIKI_HOST"),
+  };
+});
+
+export const cardano = config("cardano", () => {
   const network = requiredEnv("NETWORK");
   assert(
     network === "preview" || network === "preprod" || network === "mainnet",
@@ -47,33 +64,33 @@ export function cardano() {
       "'http://' or 'https://' and must not end with '/'"
   );
   return { NETWORK: network as Network, CEXPLORER_URL: cexplorerUrl };
-}
+});
 
-export function database() {
+export const database = config("database", () => {
   return {
     DATABASE_URL: requiredEnv("DATABASE_URL"),
     DATABASE_MAX_CONNECTIONS: Number(
       process.env.DATABASE_MAX_CONNECTIONS || 16
     ),
   };
-}
+});
 
-export function ogmios() {
+export const ogmios = config("ogmios", (): ConnectionConfig => {
   return {
     host: requiredEnv("OGMIOS_HOST"),
     port: parseInt(requiredEnv("OGMIOS_PORT")),
     // TODO: Add OGMIOS_TLS, or better, parse from a single env
-  } as ConnectionConfig;
-}
+  };
+});
 
-export function ipfs() {
+export const ipfs = config("ipfs", () => {
   return {
     IPFS_SERVER_URL: requiredEnv("IPFS_SERVER_URL"),
     IPFS_SERVER_TIMEOUT: Number(process.env.IPFS_SERVER_TIMEOUT || 30_000),
   };
-}
+});
 
-export function discord() {
+export const discord = config("discord", () => {
   return {
     DISCORD_BOT_ID: requiredEnv("DISCORD_BOT_ID"),
     DISCORD_BOT_TOKEN: requiredEnv("DISCORD_BOT_TOKEN"),
@@ -85,9 +102,9 @@ export function discord() {
     ),
     DISCORD_SHINKA_ROLE_ID: requiredEnv("DISCORD_SHINKA_ROLE_ID"),
   };
-}
+});
 
-export function chainIndex() {
+export const chain = config("chain", () => {
   // TODO: Validate config
   const rawConfig = YAML.parse(
     fs.readFileSync(requiredEnv("CHAIN_INDEX_CONFIG"), "utf8")
@@ -104,34 +121,36 @@ export function chainIndex() {
     CHAIN_INDEX_END_DELAY: Number(process.env.CHAIN_INDEX_END_DELAY || 0),
     CONFIG: config,
   };
-}
+});
 
-export function aws() {
+export const aws = config("aws", () => {
   return {
     ASSETS_S3_BUCKET: requiredEnv("ASSETS_S3_BUCKET"),
   };
-}
+});
 
-export function ai() {
+export const ai = config("ai", () => {
   return {
     AI_SERVER_URL: requiredEnv("AI_SERVER_URL"),
     AI_S3_BUCKET: requiredEnv("AI_S3_BUCKET"),
     IPFS_GATEWAY_URL: requiredEnv("IPFS_GATEWAY_URL"),
   };
-}
+});
 
-export const CHAIN_CHASING_BATCH_INTERVAL = Number(
-  process.env.CHAIN_CHASING_BATCH_INTERVAL || 86_400_000 // 1 day
-);
-export const CHAIN_BLOCK_GC_INTERVAL = Number(
-  process.env.CHAIN_BLOCK_GC_INTERVAL || 36_000_000 // 1 hour
-);
-export const CHAIN_BLOCK_INGESTION_CHECKPOINT = Number(
-  process.env.CHAIN_BLOCK_INGESTION_CHECKPOINT || 1_000
-);
-export const CHAIN_BLOCK_INGESTION_REPORT_RESOLUTION = Number(
-  process.env.CHAIN_BLOCK_INGESTION_RESOLUTION || 60_000 // 1 minute
-);
+export const BLOCK_INGESTION_CONFIG = {
+  CHAIN_CHASING_BATCH_INTERVAL: Number(
+    process.env.CHAIN_CHASING_BATCH_INTERVAL || 86_400_000 // 1 day
+  ),
+  CHAIN_BLOCK_GC_INTERVAL: Number(
+    process.env.CHAIN_BLOCK_GC_INTERVAL || 36_000_000 // 1 hour
+  ),
+  CHAIN_BLOCK_INGESTION_CHECKPOINT: Number(
+    process.env.CHAIN_BLOCK_INGESTION_CHECKPOINT || 1_000
+  ),
+  CHAIN_BLOCK_INGESTION_REPORT_RESOLUTION: Number(
+    process.env.CHAIN_BLOCK_INGESTION_RESOLUTION || 60_000 // 1 minute
+  ),
+};
 
 function parseChainIndexBegin(
   raw: string | undefined

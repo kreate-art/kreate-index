@@ -2,7 +2,6 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
 
 import { assert } from "@teiki/protocol/utils";
 
-import { TEIKI_HOST } from "../../config";
 import { sqlNotIn } from "../../db/fragments";
 import { $setup } from "../../framework/base";
 import { createPollingIndexer, PollingIndexer } from "../../framework/polling";
@@ -15,9 +14,6 @@ import {
 
 type ProjectId = string;
 type Task = { projectId: ProjectId; customUrl: string | null };
-type DiscordAlertContext$Project = DiscordAlertContext & {
-  ignored: ProjectId[];
-};
 
 const TASKS_PER_FETCH = 8;
 
@@ -32,7 +28,7 @@ discordProjectAlertIndexer.setup = $setup(async ({ sql }) => {
 
 export function discordProjectAlertIndexer(
   connections: ConnectionsWithDiscord
-): PollingIndexer<DiscordAlertContext$Project> {
+): PollingIndexer<DiscordAlertContext<ProjectId>> {
   return createPollingIndexer({
     name: "discord.project_alert",
     connections,
@@ -73,7 +69,7 @@ export function discordProjectAlertIndexer(
     handle: async function ({ projectId, customUrl }) {
       const {
         connections: { sql, discord },
-        context: { ignored },
+        context: { ignored, teikiHost },
       } = this;
       try {
         // NOTE: This function is copied from teiki-backend/src/indexer/project-info.ts
@@ -92,13 +88,13 @@ export function discordProjectAlertIndexer(
               .setStyle(ButtonStyle.Secondary)
           );
 
-        const { notificationChannelId: channelId, shinkaRoleId } = this.context;
+        const { channelId, shinkaRoleId } = this.context;
         const channel = await discord.channels.fetch(channelId);
         assert(channel, `Channel ${channelId} not found`);
         assert("send" in channel, `Channel ${channelId} is not sendable`);
         const projectUrl = customUrl
-          ? `${TEIKI_HOST}/projects/${customUrl}`
-          : `${TEIKI_HOST}/projects-by-id/${projectId}`;
+          ? `${teikiHost}/projects/${customUrl}`
+          : `${teikiHost}/projects-by-id/${projectId}`;
         channel.send({
           content: `New project: ${projectUrl}\n<@&${shinkaRoleId}>`,
           // eslint-disable-next-line @typescript-eslint/no-explicit-any

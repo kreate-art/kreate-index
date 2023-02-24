@@ -2,11 +2,13 @@ import * as O from "@cardano-ogmios/schema";
 
 import { UnixTime } from "@teiki/protocol/types";
 
-import {
+import { BLOCK_INGESTION_CONFIG } from "../../config";
+import { ChainBlock } from "../../types/chain";
+
+const {
   CHAIN_BLOCK_INGESTION_CHECKPOINT,
   CHAIN_BLOCK_INGESTION_REPORT_RESOLUTION,
-} from "../../config";
-import { ChainBlock } from "../../types/chain";
+} = BLOCK_INGESTION_CONFIG;
 
 export type BlockIngestor = ReturnType<typeof createBlockIngestor>;
 

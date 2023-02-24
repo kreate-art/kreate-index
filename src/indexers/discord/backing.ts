@@ -4,7 +4,6 @@ import { Address, Lovelace, UnixTime } from "lucid-cardano";
 import { Hex } from "@teiki/protocol/types";
 import { assert } from "@teiki/protocol/utils";
 
-import { TEIKI_HOST } from "../../config";
 import { sqlNotIn } from "../../db/fragments";
 import { $setup } from "../../framework/base";
 import { createPollingIndexer, PollingIndexer } from "../../framework/polling";
@@ -26,9 +25,6 @@ type Task = {
   projectTitle: string;
 };
 type BackingAlertKey = string; // txId|projectId|actorAddress
-type DiscordAlertContext$Backing = DiscordAlertContext & {
-  ignored: BackingAlertKey[];
-};
 
 const TASKS_PER_FETCH = 8;
 
@@ -40,13 +36,14 @@ discordBackingAlertIndexer.setup = $setup(async ({ sql }) => {
       actor_address TEXT NOT NULL,
       completed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       PRIMARY KEY (tx_id, project_id, actor_address)
+      -- TODO: Update PK so that project_id is first
     )
   `;
 });
 
 export function discordBackingAlertIndexer(
   connections: ConnectionsWithDiscord
-): PollingIndexer<DiscordAlertContext$Backing> {
+): PollingIndexer<DiscordAlertContext<BackingAlertKey>> {
   return createPollingIndexer({
     name: "discord.backing_alert",
     connections,
@@ -115,10 +112,10 @@ export function discordBackingAlertIndexer(
     }) {
       const {
         connections: { sql, discord },
-        context: { cexplorerUrl, ignored },
+        context: { ignored, cexplorerUrl, teikiHost },
       } = this;
       try {
-        const { notificationChannelId: channelId } = this.context;
+        const { channelId } = this.context;
         // Limited at 256 characters
         const formattedProjectTitle = projectTitle.replace(
           /(.{200})..+/,
@@ -145,7 +142,7 @@ export function discordBackingAlertIndexer(
             new ButtonBuilder()
               .setStyle(5)
               .setLabel("View project")
-              .setURL(`${TEIKI_HOST}/projects-by-id/${projectId}`)
+              .setURL(`${teikiHost}/projects-by-id/${projectId}`)
           )
           .addComponents(
             new ButtonBuilder()
