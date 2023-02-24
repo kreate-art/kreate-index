@@ -4,7 +4,6 @@ import { Lovelace, UnixTime } from "lucid-cardano";
 import { Hex } from "@teiki/protocol/types";
 import { assert } from "@teiki/protocol/utils";
 
-import { TEIKI_HOST } from "../../config";
 import { sqlNotIn } from "../../db/fragments";
 import { $setup } from "../../framework/base";
 import { createPollingIndexer, PollingIndexer } from "../../framework/polling";
@@ -21,10 +20,7 @@ type Task = {
   projectId: ProjectId;
   projectTitle: string;
 };
-type WithdrawFundsAlertKey = string; // txId|projectId
-type DiscordAlertContext$WithdrawFunds = DiscordAlertContext & {
-  ignored: WithdrawFundsAlertKey[];
-};
+type WithdrawFundsAlertKey = string; // projectId|txId
 
 const TASKS_PER_FETCH = 8;
 
@@ -34,21 +30,21 @@ discordWithdrawFundsAlertIndexer.setup = $setup(async ({ sql }) => {
       tx_id TEXT NOT NULL,
       project_id TEXT NOT NULL,
       completed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      PRIMARY KEY (tx_id, project_id)
+      PRIMARY KEY (project_id, tx_id)
     )
   `;
 });
 
 export function discordWithdrawFundsAlertIndexer(
   connections: ConnectionsWithDiscord
-): PollingIndexer<DiscordAlertContext$WithdrawFunds> {
+): PollingIndexer<DiscordAlertContext<WithdrawFundsAlertKey>> {
   return createPollingIndexer({
     name: "discord.withdraw_funds_alert",
     connections,
     triggers: { channels: ["discord.withdraw_funds_alert"] },
     concurrency: { workers: 1 },
 
-    $id: ({ txId, projectId }: Task) => `${txId}|${projectId}`,
+    $id: ({ projectId, txId }: Task) => `${projectId}|${txId}`,
 
     fetch: async function () {
       const {
@@ -59,48 +55,43 @@ export function discordWithdrawFundsAlertIndexer(
         SELECT
           x.tx_id,
           x.project_id,
+          x.time,
           x.amount,
-          pi.title as project_title,
-          b.time
-        FROM (
-          SELECT
-            o.tx_id,
-            o.created_slot,
-            ppd.project_id,
-            ppd.information_cid,
-            (ppd.withdrawn_funds - ppd.prev_withdrawn_funds) AS amount
-          FROM (
-            SELECT
-              pd.id,
-              pd.project_id,
-              pd.information_cid,
-              pd.withdrawn_funds,
-              LAG (pd.withdrawn_funds) OVER (
-                PARTITION BY pd.project_id
-                ORDER BY
-                  id
-              ) AS prev_withdrawn_funds
-            FROM
-              chain.project_detail pd
-          ) ppd
-          INNER JOIN chain.output o ON o.id = ppd.id
-          WHERE
-            ppd.prev_withdrawn_funds IS NOT NULL
-            AND ppd.withdrawn_funds IS DISTINCT
+          pi.title AS project_title
+        FROM ( 
+          SELECT  
+            s.tx_id,
+            COALESCE((s.payload #> '{amount}')::bigint, 0) AS amount,
+            b.time,
+            ps.project_id
           FROM
-            ppd.prev_withdrawn_funds
+            chain.staking s
+          INNER JOIN
+            chain.project_script ps ON s.hash = ps.staking_script_hash
+          INNER JOIN
+            chain.block b ON b.slot = s.slot
         ) AS x
-        LEFT JOIN discord.withdraw_funds_alert dwfa ON (dwfa.tx_id, dwfa.project_id) = (x.tx_id, x.project_id)
-        INNER JOIN ipfs.project_info pi ON pi.cid = x.information_cid
-        INNER JOIN chain.block b ON b.slot = x.created_slot
+        LEFT JOIN
+          discord.withdraw_funds_alert dwfa ON (dwfa.tx_id, dwfa.project_id) = (x.tx_id, x.project_id)
+        INNER JOIN (
+          SELECT
+            *
+          FROM
+            chain.project_detail pd
+            INNER JOIN chain.output o ON pd.id = o.id
+          WHERE
+            o.spent_slot IS NULL
+        ) AS pd ON pd.project_id = x.project_id
+        INNER JOIN ipfs.project_info pi ON pi.cid = pd.information_cid
         WHERE
-          dwfa.project_id IS NULL
+          dwfa.tx_id IS NULL
+          AND amount > 0
           AND ${sqlNotIn(
             sql,
-            "(x.tx_id, x.project_id)",
+            "(x.project_id, x.tx_id)",
             ignored.map((item) => {
-              const [txId, projectId] = item.split("|");
-              return sql([txId, projectId]);
+              const [projectId, txId] = item.split("|");
+              return sql([projectId, txId]);
             })
           )}
         LIMIT ${TASKS_PER_FETCH}
@@ -118,10 +109,10 @@ export function discordWithdrawFundsAlertIndexer(
     }) {
       const {
         connections: { sql, discord },
-        context: { cexplorerUrl, ignored },
+        context: { ignored, cexplorerUrl, teikiHost },
       } = this;
       try {
-        const { notificationChannelId: channelId } = this.context;
+        const { channelId } = this.context;
         // Limited at 256 characters
         const formattedProjectTitle = projectTitle.replace(
           /(.{200})..+/,
@@ -142,7 +133,7 @@ export function discordWithdrawFundsAlertIndexer(
             new ButtonBuilder()
               .setStyle(5)
               .setLabel("View project")
-              .setURL(`${TEIKI_HOST}/projects-by-id/${projectId}`)
+              .setURL(`${teikiHost}/projects-by-id/${projectId}`)
           )
           .addComponents(
             new ButtonBuilder()
