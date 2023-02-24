@@ -178,6 +178,7 @@ const AllIndexers = {
         ignored: [],
         notificationChannelId: cc.DISCORD_CONTENT_MODERATION_CHANNEL_ID,
         shinkaRoleId: cc.DISCORD_SHINKA_ROLE_ID,
+        cexplorerUrl: config.cardano().CEXPLORER_URL,
       };
     }
   ),
@@ -190,6 +191,7 @@ const AllIndexers = {
         ignored: [],
         notificationChannelId: cc.DISCORD_BACKING_ALERT_CHANNEL_ID,
         shinkaRoleId: cc.DISCORD_SHINKA_ROLE_ID,
+        cexplorerUrl: config.cardano().CEXPLORER_URL,
       };
     }
   ),

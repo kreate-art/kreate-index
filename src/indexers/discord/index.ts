@@ -9,6 +9,7 @@ export type ConnectionsWithDiscord = VitalConnections & Connections<"discord">;
 export type DiscordAlertContext = {
   notificationChannelId: string;
   shinkaRoleId: string;
+  cexplorerUrl: string;
 };
 
 // TODO: This function shouldn't be called directly by any indexer.

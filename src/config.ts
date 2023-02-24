@@ -40,7 +40,13 @@ export function cardano() {
     network === "preview" || network === "preprod" || network === "mainnet",
     "Network must be either: preview, preprod, mainnet."
   );
-  return { NETWORK: network as Network };
+  const cexplorerUrl = requiredEnv("CEXPLORER_URL");
+  assert(
+    /^(http|https):\/\/.*[^/]$/.test(cexplorerUrl),
+    "Cexplorer url must starts with " +
+      "'http://' or 'https://' and must not end with '/'"
+  );
+  return { NETWORK: network as Network, CEXPLORER_URL: cexplorerUrl };
 }
 
 export function database() {
