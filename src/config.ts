@@ -90,6 +90,9 @@ export const discord = cached(() => {
     DISCORD_WITHDRAW_FUNDS_ALERT_CHANNEL_ID: requiredEnv(
       "DISCORD_WITHDRAW_FUNDS_ALERT_CHANNEL_ID"
     ),
+    DISCORD_DELEGATION_ALERT_CHANNEL_ID: requiredEnv(
+      "DISCORD_DELEGATION_ALERT_CHANNEL_ID"
+    ),
     DISCORD_SHINKA_ROLE_ID: requiredEnv("DISCORD_SHINKA_ROLE_ID"),
   };
 });
