@@ -1,21 +1,24 @@
 import { Events } from "discord.js";
 
+import * as config from "../../config";
 import { Connections } from "../../connections";
 import { VitalConnections } from "../../framework/polling";
 
 // TODO: Proper failures handling
 export type ConnectionsWithDiscord = VitalConnections & Connections<"discord">;
 
-export type DiscordAlertContext = {
-  notificationChannelId: string;
+export type DiscordAlertContext<K = unknown> = {
+  ignored: K[];
+  channelId: string;
   shinkaRoleId: string;
   cexplorerUrl: string;
+  teikiHost: string;
 };
 
 // TODO: This function shouldn't be called directly by any indexer.
 export function startDiscordBotInteractionListener(
   { sql, discord }: ConnectionsWithDiscord,
-  { notificationChannelId }: DiscordAlertContext
+  { channelId }: DiscordAlertContext
 ) {
   discord.once(Events.ClientReady, async (c) => {
     console.log(`Logged in as ${c.user.tag}!`);
@@ -24,7 +27,7 @@ export function startDiscordBotInteractionListener(
   discord.on(Events.InteractionCreate, async (i) => {
     try {
       if (i.isButton()) {
-        if (i.channelId !== notificationChannelId) return;
+        if (i.channelId !== channelId) return;
 
         const [action, projectId] = i.customId.split("-");
         const actionUser = `${i.member?.user.username}#${i.member?.user.discriminator}`;
@@ -63,4 +66,16 @@ export function startDiscordBotInteractionListener(
       console.log(e);
     }
   });
+}
+
+export function createDiscordAlertContext<K>(
+  channelId: string
+): DiscordAlertContext<K> {
+  return {
+    ignored: [],
+    channelId,
+    shinkaRoleId: config.discord().DISCORD_SHINKA_ROLE_ID,
+    cexplorerUrl: config.cardano().CEXPLORER_URL,
+    teikiHost: config.teiki().TEIKI_HOST,
+  };
 }
