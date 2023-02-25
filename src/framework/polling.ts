@@ -15,7 +15,7 @@ type PollingTrigger =
   | "continue"
   | "retry"
   | { scheduled: TimeDifference }
-  | { channel: string };
+  | { channel: string; payload: string };
 
 type PollingThis<Context, Connections extends VitalConnections> = {
   context: Context;
@@ -40,7 +40,8 @@ type PollingIndexParams<Context, Connections extends VitalConnections, Task> = {
   $id: (task: Task) => TaskId;
   initialize?: (this: PollingThis<Context, Connections>) => MaybePromise<void>;
   fetch: (
-    this: PollingThis<Context, Connections>
+    this: PollingThis<Context, Connections>,
+    trigger: PollingTrigger
   ) => MaybePromise<{ tasks: Task[]; continue: boolean } | null>;
   handle?: (
     this: PollingThis<Context, Connections>,
@@ -51,7 +52,10 @@ type PollingIndexParams<Context, Connections extends VitalConnections, Task> = {
     tasks: NonEmpty<WithId<Task, TaskId>[]>
   ) => MaybePromise<void>;
   triggers: {
-    channels?: string[];
+    channels?: (
+      | string
+      | { channel: string; filter: (payload: string) => boolean }
+    )[];
     interval?: TimeDifference;
     retry?: TimeDifference;
   };
@@ -169,13 +173,32 @@ export function createPollingIndexer<
 
     const notifications = connections.notifications;
     const unlistens = await Promise.all(
-      channels.map(async (channel) =>
-        notifications.listen(
-          channel,
-          () => poll({ channel }),
-          () => console.log(`[${name}] Listening on channel: ${channel}`)
-        )
-      )
+      channels.map(async (argument) => {
+        if (typeof argument === "string") {
+          const channel = argument;
+          return notifications.listen(
+            channel,
+            (payload) => poll({ channel, payload }),
+            () => console.log(`[${name}] Listening on channel: ${channel}`)
+          );
+        } else {
+          const { channel, filter } = argument;
+          return notifications.listen(
+            channel,
+            (payload) => {
+              if (filter(payload)) poll({ channel, payload });
+              else
+                console.log(
+                  `[${name}] Notification ignored: ${channel} | ${payload}`
+                );
+            },
+            () =>
+              console.log(
+                `[${name}] Listening with custom filter on channel: ${channel}`
+              )
+          );
+        }
+      })
     );
 
     console.log(`[${name}] Started!`);
@@ -213,7 +236,7 @@ export function createPollingIndexer<
       } else {
         if (taskQueue.idle()) willContinue = willRetry = false;
         console.log(`[${name}] Fetching at ${now.toISOString()} ~`, trigger);
-        const fetched = await fetch.call(self);
+        const fetched = await fetch.call(self, trigger);
         if (!fetched) console.log(`[${name}] Fetcher skips. Move on.`);
         else {
           const tasks: WithId<Task, TaskId>[] = [];
