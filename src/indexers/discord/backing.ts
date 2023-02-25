@@ -8,8 +8,7 @@ import { sqlNotIn } from "../../db/fragments";
 import { $setup } from "../../framework/base";
 import { createPollingIndexer, PollingIndexer } from "../../framework/polling";
 import { BackingActionType } from "../../types/backing";
-
-import { shortenNumber } from "./utils";
+import { shortenNumber } from "../../utils";
 
 import { ConnectionsWithDiscord, DiscordAlertContext } from ".";
 

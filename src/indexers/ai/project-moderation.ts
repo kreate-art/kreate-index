@@ -7,7 +7,7 @@ import {
   PollingIndexer,
   VitalConnections,
 } from "../../framework/polling";
-import { objectEntries } from "../../types/typelevel";
+import { objectEntries } from "../../utils";
 
 export type AiProjectModerationContext = {
   aiServerUrl: string;

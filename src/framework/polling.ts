@@ -3,7 +3,8 @@ import fastq from "fastq";
 import { TimeDifference, UnixTime } from "@teiki/protocol/types";
 
 import { Connections } from "../connections";
-import { MaybePromise, NonEmpty, noop$async, WithId } from "../types/typelevel";
+import { MaybePromise, NonEmpty, WithId } from "../types/typelevel";
+import { noop$async } from "../utils";
 
 import { ErrorHandler, reduceErrorHandler } from "./base";
 

@@ -8,6 +8,7 @@ import YAML from "yaml";
 import { assert } from "@teiki/protocol/utils";
 
 import { loadConfig } from "./indexers/chain/context";
+import { cached } from "./utils";
 
 dotenv.config();
 
@@ -32,26 +33,13 @@ export function pick<T extends Record<string, unknown>, K extends keyof T>(
   return Object.fromEntries(entries);
 }
 
-const configs = new Map<string, unknown>();
-
-function config<T>(namespace: string, init: () => T): () => T {
-  return () => {
-    let config = configs.get(namespace);
-    if (config === undefined) {
-      config = init();
-      configs.set(namespace, config);
-    }
-    return config as T;
-  };
-}
-
-export const teiki = config("teiki", () => {
+export const teiki = cached(() => {
   return {
     TEIKI_HOST: requiredEnv("TEIKI_HOST"),
   };
 });
 
-export const cardano = config("cardano", () => {
+export const cardano = cached(() => {
   const network = requiredEnv("NETWORK");
   assert(
     network === "preview" || network === "preprod" || network === "mainnet",
@@ -66,7 +54,7 @@ export const cardano = config("cardano", () => {
   return { NETWORK: network as Network, CEXPLORER_URL: cexplorerUrl };
 });
 
-export const database = config("database", () => {
+export const database = cached(() => {
   return {
     DATABASE_URL: requiredEnv("DATABASE_URL"),
     DATABASE_MAX_CONNECTIONS: Number(
@@ -75,7 +63,7 @@ export const database = config("database", () => {
   };
 });
 
-export const ogmios = config("ogmios", (): ConnectionConfig => {
+export const ogmios = cached((): ConnectionConfig => {
   return {
     host: requiredEnv("OGMIOS_HOST"),
     port: parseInt(requiredEnv("OGMIOS_PORT")),
@@ -83,14 +71,14 @@ export const ogmios = config("ogmios", (): ConnectionConfig => {
   };
 });
 
-export const ipfs = config("ipfs", () => {
+export const ipfs = cached(() => {
   return {
     IPFS_SERVER_URL: requiredEnv("IPFS_SERVER_URL"),
     IPFS_SERVER_TIMEOUT: Number(process.env.IPFS_SERVER_TIMEOUT || 30_000),
   };
 });
 
-export const discord = config("discord", () => {
+export const discord = cached(() => {
   return {
     DISCORD_BOT_ID: requiredEnv("DISCORD_BOT_ID"),
     DISCORD_BOT_TOKEN: requiredEnv("DISCORD_BOT_TOKEN"),
@@ -104,7 +92,7 @@ export const discord = config("discord", () => {
   };
 });
 
-export const chain = config("chain", () => {
+export const chain = cached(() => {
   // TODO: Validate config
   const rawConfig = YAML.parse(
     fs.readFileSync(requiredEnv("CHAIN_INDEX_CONFIG"), "utf8")
@@ -123,13 +111,13 @@ export const chain = config("chain", () => {
   };
 });
 
-export const aws = config("aws", () => {
+export const aws = cached(() => {
   return {
     ASSETS_S3_BUCKET: requiredEnv("ASSETS_S3_BUCKET"),
   };
 });
 
-export const ai = config("ai", () => {
+export const ai = cached(() => {
   return {
     AI_SERVER_URL: requiredEnv("AI_SERVER_URL"),
     AI_S3_BUCKET: requiredEnv("AI_S3_BUCKET"),

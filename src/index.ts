@@ -23,7 +23,8 @@ import {
   setupViews,
 } from "./indexers/schema";
 import prexit from "./prexit";
-import { MaybePromise, objectKeys } from "./types/typelevel";
+import { MaybePromise } from "./types/typelevel";
+import { objectKeys } from "./utils";
 
 // Cleanups
 const shutdowns: (() => MaybePromise<void>)[] = [];
