@@ -80,7 +80,6 @@ export const ipfs = cached(() => {
 
 export const discord = cached(() => {
   return {
-    DISCORD_BOT_ID: requiredEnv("DISCORD_BOT_ID"),
     DISCORD_BOT_TOKEN: requiredEnv("DISCORD_BOT_TOKEN"),
     DISCORD_CONTENT_MODERATION_CHANNEL_ID: requiredEnv(
       "DISCORD_CONTENT_MODERATION_CHANNEL_ID"
