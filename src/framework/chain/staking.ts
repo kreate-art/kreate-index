@@ -341,11 +341,11 @@ export function createStakingIndexer({
 
 export const afterBlock = $handlers<{ staking: StakingIndexer }>().afterBlock(
   async ({
+    driver,
     context: { staking },
     connections: { sql },
     block,
     inSync,
-    storeBlock,
   }) => {
     const events: ChainStaking[] = [];
     const slot = block.header.slot;
@@ -388,7 +388,7 @@ export const afterBlock = $handlers<{ staking: StakingIndexer }>().afterBlock(
             });
         } else if ("stakeKeyDeregistration" in cert) {
           const hash = cert.stakeKeyDeregistration;
-          if (staking.isHashWatched(hash)) {
+          if (staking.isHashWatched(hash))
             events.push({
               hash,
               action: "deregister",
@@ -396,15 +396,19 @@ export const afterBlock = $handlers<{ staking: StakingIndexer }>().afterBlock(
               slot,
               txId,
             });
-            staking.unwatch(hash);
-          }
         }
       }
     }
     if (events.length) {
-      storeBlock && (await storeBlock());
+      const store = driver.storeBlock;
+      store && (await store());
       await sql`INSERT INTO chain.staking ${sql(events)}`;
       if (inSync) staking.reload(events.map((e) => e.hash));
+      for (const event of events) {
+        const action = event.action;
+        driver.notify(`staking:${action}`);
+        if (action === "deregister") staking.unwatch(event.hash);
+      }
     }
   }
 );

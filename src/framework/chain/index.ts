@@ -138,7 +138,7 @@ type ChainIndexFilter<TContext, TEvent> = (_: {
 }) => MaybePromise<TEvent[] | null>;
 
 type ChainIndexEventHandler<TContext, TEvent> = (_: {
-  driver: ChainIndexEventDriver;
+  driver: ChainIndexTxDriver;
   connections: ChainIndexConnections;
   context: TContext;
   block: ChainBlock;
@@ -161,11 +161,11 @@ type ChainIndexOnceInSyncHandler<TContext> = (_: {
 }) => MaybePromise<void>;
 
 type ChainIndexAfterBlockHandler<TContext> = (_: {
+  driver: ChainIndexBlockDriver;
   connections: ChainIndexConnections;
   context: TContext;
   block: O.BlockBabbage;
   inSync: boolean;
-  storeBlock: (() => Promise<void>) | undefined;
 }) => MaybePromise<void>;
 
 // Blocks are handled sequentially
@@ -210,10 +210,7 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
 
   private nextBlockGc!: UnixTime;
   private nextChasingBatchFlush!: UnixTime;
-  private batch!: {
-    notifications: Set<string>;
-    refreshes: Set<string>;
-  };
+  private baseDriver!: ChainIndexBaseDriver;
 
   private blockIngestor!: BlockIngestor;
 
@@ -290,7 +287,10 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
     for (const initialize of this.handlers.initializers ?? [])
       await initialize(params);
 
-    this.batch = { notifications: new Set(), refreshes: new Set() };
+    this.baseDriver = createBaseDriver({
+      notifications: new Set(),
+      refreshes: new Set(),
+    });
     this.blockIngestor = createBlockIngestor();
 
     this.inSync = false;
@@ -424,8 +424,8 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
       context,
       handlers: { filters, events, afterBlock },
       blockIngestor,
-      batch,
       endAt,
+      baseDriver,
     } = this;
 
     let interpreter = connections.slotTimeInterpreter;
@@ -474,7 +474,7 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
             isBlockStored = true;
           }
 
-          const driver = createEventDriver(connections, batch, tx, slot);
+          const driver = createTxDriver(baseDriver, connections, tx, slot);
           const paramsWithDriver = { ...params, driver };
 
           await Promise.all(
@@ -505,20 +505,19 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
           await driver._finally();
         }
       }
-      afterBlock &&
-        (await afterBlock({
-          connections,
-          context,
-          block,
-          inSync,
-          storeBlock: isBlockStored
-            ? undefined
-            : async () => {
+      if (afterBlock) {
+        const driver = isBlockStored
+          ? baseDriver
+          : {
+              ...baseDriver,
+              storeBlock: async () => {
                 blockIngestor.flush();
                 await sqlInsertChainBlock(sql, cblock);
                 isBlockStored = true;
               },
-        }));
+            };
+        await afterBlock({ driver, connections, context, block, inSync });
+      }
       if (inSync && time >= this.nextBlockGc) {
         const count = await gcDetachedBlocks(sql);
         if (count == null) console.warn("// GC failed...");
@@ -526,17 +525,7 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
         this.nextBlockGc = time + CHAIN_BLOCK_GC_INTERVAL;
       }
       if (inSync || time >= this.nextChasingBatchFlush) {
-        const { notifications, refreshes } = batch;
-        if (notifications.size) {
-          const notify = connections.notifications.notify;
-          for (const c of notifications) notify(c);
-          notifications.clear();
-        }
-        if (refreshes.size) {
-          const refresh = connections.views.refresh;
-          for (const v of refreshes) refresh(v);
-          refreshes.clear();
-        }
+        baseDriver.flush(connections);
         if (!inSync)
           this.nextChasingBatchFlush = time + CHAIN_CHASING_BATCH_INTERVAL;
       }
@@ -617,9 +606,17 @@ export function $handlers<TContext, TEvent extends IEvent = { type: never }>() {
   };
 }
 
-export interface ChainIndexEventDriver {
+export interface ChainIndexBaseDriver {
   notify(channel: string): void;
   refresh(view: string): void;
+  flush(connections: Connections<"notifications" | "views">): Promise<void>;
+}
+
+export interface ChainIndexBlockDriver extends ChainIndexBaseDriver {
+  storeBlock?: () => Promise<void>;
+}
+
+export interface ChainIndexTxDriver extends ChainIndexBaseDriver {
   store<T>(
     indicies: number[],
     each: (output: ChainOutput, index: number) => [string | null, T] | undefined
@@ -631,15 +628,37 @@ export interface ChainIndexEventDriver {
   _finally(): Promise<void>;
 }
 
-function createEventDriver(
+function createBaseDriver({
+  notifications,
+  refreshes,
+}: {
+  notifications: Set<string>;
+  refreshes: Set<string>;
+}): ChainIndexBaseDriver {
+  return {
+    notify: notifications.add.bind(notifications),
+    refresh: refreshes.add.bind(refreshes),
+    flush: async function (connections) {
+      if (notifications.size) {
+        const notify = connections.notifications.notify;
+        for (const c of notifications) notify(c);
+        notifications.clear();
+      }
+      if (refreshes.size) {
+        const refresh = connections.views.refresh;
+        for (const v of refreshes) refresh(v);
+        refreshes.clear();
+      }
+    },
+  };
+}
+
+function createTxDriver(
+  base: ChainIndexBaseDriver,
   { synchronized, sql, lucid }: ChainIndexConnections,
-  batch: {
-    notifications: Set<string>;
-    refreshes: Set<string>;
-  },
   tx: O.TxBabbage,
   slot: O.Slot
-): ChainIndexEventDriver {
+): ChainIndexTxDriver {
   const createdOutputs = new Map<number, WithId<ChainOutput>>();
   let cachedScripts: Map<L.ScriptHash, ChainScript> | undefined;
 
@@ -734,8 +753,7 @@ function createEventDriver(
   }
 
   return {
-    notify: batch.notifications.add.bind(batch.notifications),
-    refresh: batch.refreshes.add.bind(batch.refreshes),
+    ...base,
 
     async store(indicies, each) {
       return doStore(indicies, each, false);
