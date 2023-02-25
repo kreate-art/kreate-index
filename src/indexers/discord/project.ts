@@ -20,8 +20,8 @@ const TASKS_PER_FETCH = 8;
 discordProjectAlertIndexer.setup = $setup(async ({ sql }) => {
   await sql`
     CREATE TABLE IF NOT EXISTS discord.project_alert (
-      project_id text PRIMARY KEY,
-      completed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      project_id varchar(64) PRIMARY KEY,
+      completed_at timestamptz NOT NULL DEFAULT NOW()
     )
   `;
 });

@@ -14,9 +14,9 @@ import { ConnectionsWithDiscord, DiscordAlertContext } from ".";
 
 type ProjectId = string;
 type Task = {
-  txId: Hex;
   projectId: ProjectId;
   actorAddress: Address;
+  txId: Hex;
   amount: Lovelace;
   action: BackingActionType;
   message: string;
@@ -30,12 +30,11 @@ const TASKS_PER_FETCH = 8;
 discordBackingAlertIndexer.setup = $setup(async ({ sql }) => {
   await sql`
     CREATE TABLE IF NOT EXISTS discord.backing_alert (
-      tx_id TEXT NOT NULL,
-      project_id TEXT NOT NULL,
-      actor_address TEXT NOT NULL,
-      completed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      PRIMARY KEY (tx_id, project_id, actor_address)
-      -- TODO: Update PK so that project_id is first
+      project_id varchar(64) NOT NULL,
+      actor_address text NOT NULL,
+      tx_id varchar(64) NOT NULL,
+      completed_at timestamptz NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (project_id, actor_address, tx_id)
     )
   `;
 });
@@ -49,8 +48,8 @@ export function discordBackingAlertIndexer(
     triggers: { channels: ["discord.backing_alert"] },
     concurrency: { workers: 1 },
 
-    $id: ({ txId, projectId, actorAddress }: Task) =>
-      `${txId}|${projectId}|${actorAddress}`,
+    $id: ({ projectId, actorAddress, txId }: Task) =>
+      `${projectId}|${actorAddress}|${txId}`,
 
     fetch: async function () {
       const {
@@ -71,8 +70,8 @@ export function discordBackingAlertIndexer(
           chain.backing_action ba
         LEFT JOIN
           discord.backing_alert dba
-          ON (dba.tx_id, dba.project_id, dba.actor_address)
-               = (ba.tx_id, ba.project_id, ba.actor_address)
+          ON (dba.project_id, dba.actor_address, dba.tx_id)
+               = (ba.project_id, ba.actor_address, ba.tx_id)
         INNER JOIN (
           SELECT
             *
@@ -87,11 +86,8 @@ export function discordBackingAlertIndexer(
           dba.tx_id IS NULL
           AND ${sqlNotIn(
             sql,
-            "(ba.tx_id, ba.project_id, ba.actor_address)",
-            ignored.map((item) => {
-              const [txId, projectId, actorAddress] = item.split("|");
-              return sql([txId, projectId, actorAddress]);
-            })
+            "(ba.project_id, ba.actor_address, ba.tx_id)",
+            ignored.map((key) => key.split("|"))
           )}
         LIMIT ${TASKS_PER_FETCH}
       `;
@@ -162,7 +158,7 @@ export function discordBackingAlertIndexer(
         // TODO: Error handling?
         await sql`
           INSERT INTO discord.backing_alert ${sql([
-            { txId, projectId, actorAddress },
+            { projectId, actorAddress, txId },
           ])}
             ON CONFLICT DO NOTHING
         `;
