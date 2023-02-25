@@ -7,8 +7,7 @@ import { VitalConnections } from "../../framework/polling";
 // TODO: Proper failures handling
 export type ConnectionsWithDiscord = VitalConnections & Connections<"discord">;
 
-export type DiscordAlertContext<K = unknown> = {
-  ignored: K[];
+export type DiscordAlertContext = {
   channelId: string;
   shinkaRoleId: string;
   cexplorerUrl: string;
@@ -68,11 +67,10 @@ export function startDiscordBotInteractionListener(
   });
 }
 
-export function createDiscordAlertContext<K>(
+export function createDiscordAlertContext(
   channelId: string
-): DiscordAlertContext<K> {
+): DiscordAlertContext {
   return {
-    ignored: [],
     channelId,
     shinkaRoleId: config.discord().DISCORD_SHINKA_ROLE_ID,
     cexplorerUrl: config.cardano().CEXPLORER_URL,

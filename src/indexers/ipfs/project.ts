@@ -3,7 +3,6 @@ import { Cid } from "@teiki/protocol/types";
 import { nullIfFalsy } from "@teiki/protocol/utils";
 
 import { AllConnections, Connections } from "../../connections";
-import { sqlNotIn } from "../../db/fragments";
 import { $setup } from "../../framework/base";
 import {
   createPollingIndexer,
@@ -13,7 +12,6 @@ import {
 import { NonEmpty } from "../../types/typelevel";
 
 // TODO: Proper failures handling
-export type IpfsProjectContext = { ignored: Cid[] };
 type Task = { cid: Cid };
 
 const TASKS_PER_FETCH = 40;
@@ -65,7 +63,7 @@ ipfsProjectAnnouncementIndexer.setup = $setup(async ({ sql }) => {
 
 export function ipfsProjectInfoIndexer(
   connections: VitalConnections & Connections<"ipfs" | "views">
-): PollingIndexer<IpfsProjectContext> {
+): PollingIndexer<null> {
   return createPollingIndexer({
     name: "ipfs.project_info",
     connections,
@@ -76,7 +74,6 @@ export function ipfsProjectInfoIndexer(
     fetch: async function () {
       const {
         connections: { sql },
-        context: { ignored },
       } = this;
       const tasks = await sql<Task[]>`
         SELECT DISTINCT
@@ -89,7 +86,6 @@ export function ipfsProjectInfoIndexer(
           ON pd.information_cid = pi.cid
         WHERE
           pi.cid IS NULL
-          AND ${sqlNotIn(sql, "pd.information_cid", ignored)}
         LIMIT ${TASKS_PER_FETCH};
       `;
       return { tasks, continue: tasks.length >= TASKS_PER_FETCH };
@@ -98,7 +94,6 @@ export function ipfsProjectInfoIndexer(
     handle: async function ({ cid }) {
       const {
         connections: { sql, ipfs, notifications, views },
-        context: { ignored },
       } = this;
       // TODO: Proper type
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -110,7 +105,7 @@ export function ipfsProjectInfoIndexer(
       } catch (error) {
         // TODO: Better log here
         console.error("ERROR:", cid, error);
-        ignored.push(cid);
+        this.retry();
         return;
       }
 
@@ -167,7 +162,7 @@ export function ipfsProjectInfoIndexer(
 
 export function ipfsProjectAnnouncementIndexer(
   connections: VitalConnections & Connections<"ipfs">
-): PollingIndexer<IpfsProjectContext> {
+): PollingIndexer<null> {
   return createPollingIndexer({
     name: "ipfs.project_announcement",
     connections,
@@ -178,7 +173,6 @@ export function ipfsProjectAnnouncementIndexer(
     fetch: async function () {
       const {
         connections: { sql },
-        context: { ignored },
       } = this;
       const tasks = await sql<Task[]>`
         SELECT DISTINCT
@@ -192,7 +186,6 @@ export function ipfsProjectAnnouncementIndexer(
         WHERE
           pa.cid IS NULL
           AND pd.last_announcement_cid IS NOT NULL
-          AND ${sqlNotIn(sql, "pd.last_announcement_cid", ignored)}
         LIMIT ${TASKS_PER_FETCH};
       `;
       return { tasks, continue: tasks.length >= TASKS_PER_FETCH };
@@ -201,7 +194,6 @@ export function ipfsProjectAnnouncementIndexer(
     handle: async function ({ cid }) {
       const {
         connections: { sql, ipfs, notifications },
-        context: { ignored },
       } = this;
       try {
         const data = fromJson(await fetchFromIpfs(ipfs, cid));
@@ -214,7 +206,7 @@ export function ipfsProjectAnnouncementIndexer(
         notifications.notify("ai.project_moderation");
       } catch (error) {
         console.error("ERROR:", cid, error); // TODO: Better log here
-        ignored.push(cid);
+        this.retry();
       }
     },
 

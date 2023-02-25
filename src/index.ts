@@ -127,12 +127,12 @@ const AllIndexers = {
   "ipfs.project_info": wrapPollingIndexer(
     ipfsProjectInfoIndexer,
     ["sql", "ipfs", "notifications", "views"],
-    () => ({ ignored: [] })
+    () => null
   ),
   "ipfs.project_announcement": wrapPollingIndexer(
     ipfsProjectAnnouncementIndexer,
     ["sql", "ipfs", "notifications"],
-    () => ({ ignored: [] })
+    () => null
   ),
   "ai.logo": wrapPollingIndexer(
     aiLogoIndexer,

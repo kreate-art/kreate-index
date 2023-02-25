@@ -4,7 +4,6 @@ import { Address, Lovelace, UnixTime } from "lucid-cardano";
 import { Hex } from "@teiki/protocol/types";
 import { assert } from "@teiki/protocol/utils";
 
-import { sqlNotIn } from "../../db/fragments";
 import { $setup } from "../../framework/base";
 import { createPollingIndexer, PollingIndexer } from "../../framework/polling";
 import { BackingActionType } from "../../types/backing";
@@ -25,7 +24,7 @@ type Task = {
 };
 type BackingAlertKey = string; // txId|projectId|actorAddress
 
-const TASKS_PER_FETCH = 8;
+const TASKS_PER_FETCH = 20;
 
 discordBackingAlertIndexer.setup = $setup(async ({ sql }) => {
   await sql`
@@ -41,20 +40,19 @@ discordBackingAlertIndexer.setup = $setup(async ({ sql }) => {
 
 export function discordBackingAlertIndexer(
   connections: ConnectionsWithDiscord
-): PollingIndexer<DiscordAlertContext<BackingAlertKey>> {
+): PollingIndexer<DiscordAlertContext> {
   return createPollingIndexer({
     name: "discord.backing_alert",
     connections,
     triggers: { channels: ["discord.backing_alert"] },
     concurrency: { workers: 1 },
 
-    $id: ({ projectId, actorAddress, txId }: Task) =>
+    $id: ({ projectId, actorAddress, txId }: Task): BackingAlertKey =>
       `${projectId}|${actorAddress}|${txId}`,
 
     fetch: async function () {
       const {
         connections: { sql },
-        context: { ignored },
       } = this;
       const tasks = await sql<Task[]>`
         SELECT
@@ -84,11 +82,6 @@ export function discordBackingAlertIndexer(
         INNER JOIN ipfs.project_info pi ON pi.cid = pd.information_cid
         WHERE
           dba.tx_id IS NULL
-          AND ${sqlNotIn(
-            sql,
-            "(ba.project_id, ba.actor_address, ba.tx_id)",
-            ignored.map((key) => key.split("|"))
-          )}
         LIMIT ${TASKS_PER_FETCH}
       `;
       return { tasks, continue: tasks.length >= TASKS_PER_FETCH };
@@ -107,7 +100,7 @@ export function discordBackingAlertIndexer(
     }) {
       const {
         connections: { sql, discord },
-        context: { ignored, cexplorerUrl, teikiHost },
+        context: { cexplorerUrl, teikiHost },
       } = this;
       try {
         const { channelId } = this.context;
@@ -165,7 +158,7 @@ export function discordBackingAlertIndexer(
       } catch (error) {
         // TODO: Better log here
         console.error("ERROR:", id, error);
-        ignored.push(id);
+        this.retry();
       }
     },
   });

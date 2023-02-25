@@ -2,7 +2,6 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
 
 import { assert } from "@teiki/protocol/utils";
 
-import { sqlNotIn } from "../../db/fragments";
 import { $setup } from "../../framework/base";
 import { createPollingIndexer, PollingIndexer } from "../../framework/polling";
 
@@ -15,7 +14,7 @@ import {
 type ProjectId = string;
 type Task = { projectId: ProjectId; customUrl: string | null };
 
-const TASKS_PER_FETCH = 8;
+const TASKS_PER_FETCH = 20;
 
 discordProjectAlertIndexer.setup = $setup(async ({ sql }) => {
   await sql`
@@ -28,7 +27,7 @@ discordProjectAlertIndexer.setup = $setup(async ({ sql }) => {
 
 export function discordProjectAlertIndexer(
   connections: ConnectionsWithDiscord
-): PollingIndexer<DiscordAlertContext<ProjectId>> {
+): PollingIndexer<DiscordAlertContext> {
   return createPollingIndexer({
     name: "discord.project_alert",
     connections,
@@ -44,7 +43,6 @@ export function discordProjectAlertIndexer(
     fetch: async function () {
       const {
         connections: { sql },
-        context: { ignored },
       } = this;
       const tasks = await sql<Task[]>`
         SELECT DISTINCT
@@ -60,7 +58,6 @@ export function discordProjectAlertIndexer(
           ON d.information_cid = pi.cid
         WHERE
           dpa.project_id IS NULL
-          AND ${sqlNotIn(sql, "d.project_id", ignored)}
         LIMIT ${TASKS_PER_FETCH}
       `;
       return { tasks, continue: tasks.length >= TASKS_PER_FETCH };
@@ -69,7 +66,7 @@ export function discordProjectAlertIndexer(
     handle: async function ({ projectId, customUrl }) {
       const {
         connections: { sql, discord },
-        context: { ignored, teikiHost },
+        context: { teikiHost },
       } = this;
       try {
         // NOTE: This function is copied from teiki-backend/src/indexer/project-info.ts
@@ -109,7 +106,7 @@ export function discordProjectAlertIndexer(
       } catch (error) {
         // TODO: Better log here
         console.error("ERROR:", projectId, error);
-        ignored.push(projectId);
+        this.retry();
       }
     },
   });
