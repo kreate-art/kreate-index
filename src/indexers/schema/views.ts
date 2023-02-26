@@ -7,7 +7,6 @@ import { $setup } from "../../framework/base";
 
 export const setupViews = $setup(async ({ sql }) => {
   await setupDefinitionsTable(sql);
-  await setupOpenProjectView(sql);
   await setupProjectCustomUrlMatView(sql);
   await setupProjectSummaryMatView(sql);
 });
@@ -71,25 +70,6 @@ function createMaterializedView(
   });
 }
 
-async function setupOpenProjectView(sql: Sql) {
-  // TODO: Drop this view? As it slightly affects query performance.
-  await sql`
-    CREATE OR REPLACE VIEW views.open_project AS
-    SELECT
-      p.*
-    FROM
-      chain.project p
-    WHERE
-      NOT EXISTS (
-        SELECT
-        FROM
-          admin.blocked_project bp
-        WHERE
-          p.project_id = bp.project_id
-      )
-  `;
-}
-
 export type ViewProjectCustomUrl = {
   projectId: Hex;
   customUrl: string;
@@ -122,18 +102,25 @@ async function setupProjectCustomUrlMatView(sql: Sql) {
               SELECT
                 pd.project_id,
                 pi.custom_url,
-                o.created_slot
+                o1.created_slot
               FROM
                 chain.project_detail pd
                 INNER JOIN ipfs.project_info pi ON pd.information_cid = pi.cid
-                INNER JOIN chain.output o ON pd.id = o.id
+                INNER JOIN chain.output o1 ON pd.id = o1.id
                 INNER JOIN (
-                  SELECT _op.* FROM views.open_project _op
-                  INNER JOIN chain.output _o ON _op.id = _o.id
-                  WHERE _o.spent_slot IS NULL AND _op.status NOT IN ('delisted', 'closed')
+                  SELECT p.* FROM chain.project p
+                  INNER JOIN chain.output o2 ON p.id = o2.id
+                  WHERE
+                    o2.spent_slot IS NULL
+                    AND p.status NOT IN ('delisted', 'closed')
                 ) op ON pd.project_id = op.project_id
               WHERE
-                pi.custom_url IS NOT NULL) t1
+                pi.custom_url IS NOT NULL
+                AND NOT EXISTS (
+                  SELECT FROM admin.blocked_project bp
+                  WHERE bp.project_id = pd.project_id
+                )
+            ) t1
             GROUP BY
               t1.project_id, t1.custom_url) t2
             ORDER BY
@@ -165,10 +152,14 @@ async function setupProjectSummaryMatView(sql: Sql) {
           p.status,
           p.owner_address
         FROM
-          views.open_project p
+          chain.project p
           INNER JOIN chain.output o ON p.id = o.id
         WHERE
           o.spent_slot IS NULL
+          AND NOT EXISTS(
+            SELECT FROM admin.blocked_project bp
+            WHERE bp.project_id = p.project_id
+          )
       ),
       x_project_detail AS (
         SELECT
