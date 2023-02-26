@@ -4,7 +4,6 @@ import { UnixTime } from "lucid-cardano";
 import { Hex } from "@teiki/protocol/types";
 import { assert } from "@teiki/protocol/utils";
 
-import { sqlNotIn } from "../../db/fragments";
 import { $setup } from "../../framework/base";
 import { createPollingIndexer, PollingIndexer } from "../../framework/polling";
 import { WithId } from "../../types/typelevel";
@@ -16,7 +15,6 @@ type ProjectId = string;
 type Task = {
   txId: Hex;
   projectId: ProjectId;
-  scrope: ProjectUpdateScope[];
   time: UnixTime;
   projectTitle: string;
   // Project update scope
@@ -48,81 +46,80 @@ discordProjectUpdateAlertIndexer.setup = $setup(async ({ sql }) => {
 
 export function discordProjectUpdateAlertIndexer(
   connections: ConnectionsWithDiscord
-): PollingIndexer<DiscordAlertContext<ProjectUpdateAlertKey>> {
+): PollingIndexer<DiscordAlertContext> {
   return createPollingIndexer({
     name: "discord.project_update_alert",
     connections,
     triggers: { channels: ["discord.project_update_alert"] },
     concurrency: { workers: 1 },
 
-    $id: ({ projectId, txId }: Task) => `${projectId}|${txId}`,
+    $id: ({ projectId, txId }: Task): ProjectUpdateAlertKey =>
+      `${projectId}|${txId}`,
 
     fetch: async function () {
       const {
         connections: { sql },
-        context: { ignored },
       } = this;
       const tasks = await sql<Task[]>`
         WITH update_list AS (
           SELECT * FROM (
-            SELECT 
+            SELECT
               pd.id,
               pd.project_id,
               pd.information_cid,
               LAG(information_cid) OVER (PARTITION BY pd.project_id ORDER BY pd.id) AS prev_information_cid
             FROM chain.project_detail pd
           ) AS _a
-          WHERE information_cid IS DISTINCT FROM prev_information_cid 
-        )
-        SELECT 
-          ru.project_id,
-          ru.tx_id,
-          ru.title AS project_title,
-          ru.time,
-          (ru.contents #> '{data, roadmap}' IS DISTINCT FROM ru.prev_contents #> '{data, roadmap}') AS roadmap, 
-          (ru.contents #> '{data, community}' IS DISTINCT FROM ru.prev_contents #> '{data, community}') AS community, 
-          (ru.contents #> '{data, description}' IS DISTINCT FROM ru.prev_contents #> '{data, description}') AS description, 
-          (ru.contents #> '{data, basics, tags}' IS DISTINCT FROM ru.prev_contents #> '{data, basics, tags}') AS tags, 
-          (ru.contents #> '{data, basics, title}' IS DISTINCT FROM ru.prev_contents #> '{data, basics, title}') AS title, 
-          (ru.contents #> '{data, basics, slogan}' IS DISTINCT FROM ru.prev_contents #> '{data, basics, slogan}') AS slogan, 
-          (ru.contents #> '{data, basics, summary}' IS DISTINCT FROM ru.prev_contents #> '{data, basics, summary}') AS summary, 
-          (ru.contents #> '{data, basics, customUrl}' IS DISTINCT FROM ru.prev_contents #> '{data, basics, customUrl}') AS custom_url, 
-          (ru.contents #> '{data, basics, logoImage}' IS DISTINCT FROM ru.prev_contents #> '{data, basics, logoImage}') AS logo_image, 
-          (ru.contents #> '{data, basics, coverImages}' IS DISTINCT FROM ru.prev_contents #> '{data, basics, coverImages}') AS cover_images
-        FROM (
-          SELECT 
-            ul.id,
-            ul.project_id,
-            b.time,
-            o.tx_id,
-            ul.information_cid AS cid,
+          WHERE information_cid IS DISTINCT FROM prev_information_cid
+        ),
+        update_list_prev_contents AS (
+          SELECT
+            ul.*,
             pi2.contents AS contents,
             pi2.title,
             LAG(contents) OVER (PARTITION BY ul.project_id ORDER BY ul.id) AS prev_contents
-          FROM 
+          FROM
             update_list ul
-            INNER JOIN ipfs.project_info pi2
+          INNER JOIN ipfs.project_info pi2
               ON pi2.cid = ul.information_cid
+        ),
+        x AS (
+          SELECT
+            ulpc.*,
+            o.tx_id,
+            b.time
+          FROM
+            update_list_prev_contents ulpc
             INNER JOIN chain.output o
-              ON o.id = ul.id
+              ON o.id = ulpc.id
             INNER JOIN chain.block b
               ON b.slot = o.created_slot
-            LEFT JOIN discord.project_update_alert dpua
-              ON (ul.project_id, o.tx_id) = (dpua.project_id, dpua.tx_id)
             WHERE
-              dpua.tx_id IS NULL
-              AND ${sqlNotIn(
-                sql,
-                "(ul.project_id, o.tx_id)",
-                ignored.map((item) => {
-                  const [projectId, txId] = item.split("|");
-                  return sql([projectId, txId]);
-                })
-              )}
-        ) AS ru
+              NOT EXISTS (
+                SELECT FROM discord.project_update_alert dpua
+                WHERE
+                  (ulpc.project_id, o.tx_id) = (dpua.project_id, dpua.tx_id)
+              )
+        )
+        SELECT
+          x.project_id,
+          x.tx_id,
+          x.title AS project_title,
+          x.time,
+          (x.contents #> '{data, roadmap}' IS DISTINCT FROM x.prev_contents #> '{data, roadmap}') AS roadmap,
+          (x.contents #> '{data, community}' IS DISTINCT FROM x.prev_contents #> '{data, community}') AS community,
+          (x.contents #> '{data, description}' IS DISTINCT FROM x.prev_contents #> '{data, description}') AS description,
+          (x.contents #> '{data, basics, tags}' IS DISTINCT FROM x.prev_contents #> '{data, basics, tags}') AS tags,
+          (x.contents #> '{data, basics, title}' IS DISTINCT FROM x.prev_contents #> '{data, basics, title}') AS title,
+          (x.contents #> '{data, basics, slogan}' IS DISTINCT FROM x.prev_contents #> '{data, basics, slogan}') AS slogan,
+          (x.contents #> '{data, basics, summary}' IS DISTINCT FROM x.prev_contents #> '{data, basics, summary}') AS summary,
+          (x.contents #> '{data, basics, customUrl}' IS DISTINCT FROM x.prev_contents #> '{data, basics, customUrl}') AS custom_url,
+          (x.contents #> '{data, basics, logoImage}' IS DISTINCT FROM x.prev_contents #> '{data, basics, logoImage}') AS logo_image,
+          (x.contents #> '{data, basics, coverImages}' IS DISTINCT FROM x.prev_contents #> '{data, basics, coverImages}') AS cover_images
+        FROM x
         WHERE
-          ru.contents IS DISTINCT FROM ru.prev_contents
-          AND ru.prev_contents IS NOT NULL
+          x.contents IS DISTINCT FROM x.prev_contents
+          AND x.prev_contents IS NOT NULL
         LIMIT ${TASKS_PER_FETCH}
       `;
       return { tasks, continue: tasks.length >= TASKS_PER_FETCH };
@@ -131,7 +128,7 @@ export function discordProjectUpdateAlertIndexer(
     handle: async function (task: WithId<Task, ProjectUpdateAlertKey>) {
       const {
         connections: { sql, discord },
-        context: { ignored, cexplorerUrl, teikiHost },
+        context: { cexplorerUrl, teikiHost },
       } = this;
       try {
         const { channelId } = this.context;
@@ -140,7 +137,7 @@ export function discordProjectUpdateAlertIndexer(
           /(.{120})..+/,
           "$1..."
         );
-        const scope = ProjectUpdateScope.filter((item) => task[item]).map(
+        const scope = ProjectUpdateScope.filter((item) => !!task[item]).map(
           (item) => DISPLAYED_SCOPE[item]
         );
 
@@ -184,7 +181,7 @@ export function discordProjectUpdateAlertIndexer(
       } catch (error) {
         // TODO: Better log here
         console.error("ERROR:", task.id, error);
-        ignored.push(task.id);
+        this.retry();
       }
     },
   });
