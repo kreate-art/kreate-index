@@ -66,10 +66,6 @@ export function discordBackingAlertIndexer(
           pi.title as project_title
         FROM
           chain.backing_action ba
-        LEFT JOIN
-          discord.backing_alert dba
-          ON (dba.project_id, dba.actor_address, dba.tx_id)
-               = (ba.project_id, ba.actor_address, ba.tx_id)
         INNER JOIN (
           SELECT
             *
@@ -81,7 +77,13 @@ export function discordBackingAlertIndexer(
         ) AS pd ON pd.project_id = ba.project_id
         INNER JOIN ipfs.project_info pi ON pi.cid = pd.information_cid
         WHERE
-          dba.tx_id IS NULL
+          NOT EXISTS (
+            SELECT FROM discord.backing_alert dba
+            WHERE
+              (dba.project_id, dba.actor_address, dba.tx_id)
+              = (ba.project_id, ba.actor_address, ba.tx_id)
+          )
+        ORDER BY ba.id
         LIMIT ${TASKS_PER_FETCH}
       `;
       return { tasks, continue: tasks.length >= TASKS_PER_FETCH };

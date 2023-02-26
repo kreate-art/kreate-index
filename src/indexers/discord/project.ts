@@ -50,14 +50,14 @@ export function discordProjectAlertIndexer(
           pi.custom_url as custom_url
         FROM
           chain.project_detail d
-        LEFT JOIN
-          discord.project_alert dpa
-          ON dpa.project_id = d.project_id
         INNER JOIN
           ipfs.project_info pi
           ON d.information_cid = pi.cid
         WHERE
-          dpa.project_id IS NULL
+          NOT EXISTS (
+            SELECT FROM discord.project_alert dpa
+            WHERE dpa.project_id = d.project_id
+          )
         LIMIT ${TASKS_PER_FETCH}
       `;
       return { tasks, continue: tasks.length >= TASKS_PER_FETCH };

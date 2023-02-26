@@ -12,16 +12,16 @@ import { ConnectionsWithDiscord, DiscordAlertContext } from ".";
 
 type ProjectId = string;
 type Task = {
+  projectId: ProjectId;
   txId: Hex;
   amount: Lovelace;
   withdrawnFunds: Lovelace;
-  time: UnixTime;
-  projectId: ProjectId;
   projectTitle: string;
+  time: UnixTime;
 };
 type WithdrawFundsAlertKey = string; // projectId|txId
 
-const TASKS_PER_FETCH = 8;
+const TASKS_PER_FETCH = 20;
 
 discordWithdrawFundsAlertIndexer.setup = $setup(async ({ sql }) => {
   await sql`
@@ -54,18 +54,19 @@ export function discordWithdrawFundsAlertIndexer(
       } = this;
       const tasks = await sql<Task[]>`
         SELECT
-          x.tx_id,
           x.project_id,
-          x.time,
+          x.tx_id,
           x.amount,
           pd.withdrawn_funds,
-          pi.title AS project_title
+          pi.title AS project_title,
+          x.time
         FROM (
           SELECT
+            s.id,
+            ps.project_id,
             s.tx_id,
-            COALESCE((s.payload #> '{amount}')::bigint, 0) AS amount,
-            b.time,
-            ps.project_id
+            COALESCE((s.payload -> 'amount')::bigint, 0) AS amount,
+            b.time
           FROM
             chain.staking s
           INNER JOIN
@@ -73,21 +74,25 @@ export function discordWithdrawFundsAlertIndexer(
           INNER JOIN
             chain.block b ON b.slot = s.slot
         ) AS x
-        LEFT JOIN
-          discord.withdraw_funds_alert dwfa ON (dwfa.tx_id, dwfa.project_id) = (x.tx_id, x.project_id)
         INNER JOIN (
           SELECT
             *
           FROM
             chain.project_detail pd
-            INNER JOIN chain.output o ON pd.id = o.id
+          INNER JOIN
+            chain.output o ON pd.id = o.id
           WHERE
             o.spent_slot IS NULL
         ) AS pd ON pd.project_id = x.project_id
-        INNER JOIN ipfs.project_info pi ON pi.cid = pd.information_cid
+        INNER JOIN
+          ipfs.project_info pi ON pi.cid = pd.information_cid
         WHERE
-          dwfa.tx_id IS NULL
-          AND amount > 0
+          amount > 0
+          AND NOT EXISTS (
+            SELECT FROM discord.withdraw_funds_alert dwfa
+            WHERE (dwfa.project_id, dwfa.tx_id) = (x.project_id, x.tx_id)
+          )
+        ORDER BY x.id
         LIMIT ${TASKS_PER_FETCH}
       `;
       return { tasks, continue: tasks.length >= TASKS_PER_FETCH };
@@ -95,11 +100,11 @@ export function discordWithdrawFundsAlertIndexer(
 
     handle: async function ({
       id,
-      txId,
       projectId,
-      projectTitle,
+      txId,
       amount,
       withdrawnFunds,
+      projectTitle,
       time,
     }) {
       const {
@@ -153,7 +158,7 @@ export function discordWithdrawFundsAlertIndexer(
 
         // TODO: Error handling?
         await sql`
-          INSERT INTO discord.withdraw_funds_alert ${sql([{ projectId, txId }])}
+          INSERT INTO discord.withdraw_funds_alert ${sql({ projectId, txId })}
             ON CONFLICT DO NOTHING
         `;
       } catch (error) {

@@ -11,15 +11,15 @@ import { ConnectionsWithDiscord, DiscordAlertContext } from ".";
 
 type ProjectId = string;
 type Task = {
-  txId: Hex;
-  time: UnixTime;
-  poolId: PoolId;
   projectId: ProjectId;
+  txId: Hex;
+  poolId: PoolId;
   projectTitle: string;
+  time: UnixTime;
 };
 type DelegationAlertKey = string; // projectId|txId
 
-const TASKS_PER_FETCH = 8;
+const TASKS_PER_FETCH = 20;
 
 discordDelegationAlertIndexer.setup = $setup(async ({ sql }) => {
   await sql`
@@ -53,16 +53,17 @@ export function discordDelegationAlertIndexer(
           x.project_id,
           x.tx_id,
           x.pool_id,
-          x.time,
-          pi.title AS project_title
+          pi.title AS project_title,
+          x.time
         FROM (
           SELECT
+            s.id,
             ps.project_id,
             s.tx_id,
-            (s.payload #> '{poolId}') AS pool_id,
+            (s.payload ->> 'poolId') AS pool_id,
             b.time
           FROM
-          chain.staking s
+            chain.staking s
           INNER JOIN
             chain.project_script ps ON s.hash = ps.staking_script_hash
           INNER JOIN
@@ -70,8 +71,6 @@ export function discordDelegationAlertIndexer(
           WHERE s.action = 'delegate'
           ORDER BY s.id
         ) AS x
-        LEFT JOIN
-          discord.delegation_alert dda ON dda.project_id = x.project_id
         INNER JOIN (
           SELECT
             *
@@ -85,8 +84,11 @@ export function discordDelegationAlertIndexer(
         INNER JOIN
           ipfs.project_info pi ON pi.cid = pd.information_cid
         WHERE
-          dda.tx_id IS NULL
-        ORDER BY x.time
+          NOT EXISTS (
+            SELECT FROM discord.delegation_alert dda
+            WHERE (dda.project_id, dda.tx_id) = (x.project_id, x.tx_id)
+          )
+        ORDER BY x.id
         LIMIT ${TASKS_PER_FETCH}
       `;
       return { tasks, continue: tasks.length >= TASKS_PER_FETCH };
@@ -94,8 +96,8 @@ export function discordDelegationAlertIndexer(
 
     handle: async function ({
       id,
-      txId,
       projectId,
+      txId,
       poolId,
       projectTitle,
       time,
@@ -149,7 +151,7 @@ export function discordDelegationAlertIndexer(
 
         // TODO: Error handling?
         await sql`
-          INSERT INTO discord.delegation_alert ${sql([{ txId, projectId }])}
+          INSERT INTO discord.delegation_alert ${sql({ projectId, txId })}
             ON CONFLICT DO NOTHING
         `;
       } catch (error) {
