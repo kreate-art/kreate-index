@@ -4,11 +4,9 @@ import { Lovelace, UnixTime } from "lucid-cardano";
 import { Hex } from "@teiki/protocol/types";
 import { assert } from "@teiki/protocol/utils";
 
-import { sqlNotIn } from "../../db/fragments";
 import { $setup } from "../../framework/base";
 import { createPollingIndexer, PollingIndexer } from "../../framework/polling";
-
-import { shortenNumber } from "./utils";
+import { shortenNumber } from "../../utils";
 
 import { ConnectionsWithDiscord, DiscordAlertContext } from ".";
 
@@ -16,6 +14,7 @@ type ProjectId = string;
 type Task = {
   txId: Hex;
   amount: Lovelace;
+  withdrawnFunds: Lovelace;
   time: UnixTime;
   projectId: ProjectId;
   projectTitle: string;
@@ -27,8 +26,8 @@ const TASKS_PER_FETCH = 8;
 discordWithdrawFundsAlertIndexer.setup = $setup(async ({ sql }) => {
   await sql`
     CREATE TABLE IF NOT EXISTS discord.withdraw_funds_alert (
-      tx_id TEXT NOT NULL,
-      project_id TEXT NOT NULL,
+      tx_id varchar(64) NOT NULL,
+      project_id varchar(64) NOT NULL,
       completed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       PRIMARY KEY (project_id, tx_id)
     )
@@ -37,19 +36,21 @@ discordWithdrawFundsAlertIndexer.setup = $setup(async ({ sql }) => {
 
 export function discordWithdrawFundsAlertIndexer(
   connections: ConnectionsWithDiscord
-): PollingIndexer<DiscordAlertContext<WithdrawFundsAlertKey>> {
+): PollingIndexer<DiscordAlertContext> {
   return createPollingIndexer({
     name: "discord.withdraw_funds_alert",
     connections,
-    triggers: { channels: ["discord.withdraw_funds_alert"] },
+    triggers: {
+      channels: ["staking:withdraw"],
+    },
     concurrency: { workers: 1 },
 
-    $id: ({ projectId, txId }: Task) => `${projectId}|${txId}`,
+    $id: ({ projectId, txId }: Task): WithdrawFundsAlertKey =>
+      `${projectId}|${txId}`,
 
     fetch: async function () {
       const {
         connections: { sql },
-        context: { ignored },
       } = this;
       const tasks = await sql<Task[]>`
         SELECT
@@ -57,9 +58,10 @@ export function discordWithdrawFundsAlertIndexer(
           x.project_id,
           x.time,
           x.amount,
+          pd.withdrawn_funds,
           pi.title AS project_title
-        FROM ( 
-          SELECT  
+        FROM (
+          SELECT
             s.tx_id,
             COALESCE((s.payload #> '{amount}')::bigint, 0) AS amount,
             b.time,
@@ -86,14 +88,6 @@ export function discordWithdrawFundsAlertIndexer(
         WHERE
           dwfa.tx_id IS NULL
           AND amount > 0
-          AND ${sqlNotIn(
-            sql,
-            "(x.project_id, x.tx_id)",
-            ignored.map((item) => {
-              const [projectId, txId] = item.split("|");
-              return sql([projectId, txId]);
-            })
-          )}
         LIMIT ${TASKS_PER_FETCH}
       `;
       return { tasks, continue: tasks.length >= TASKS_PER_FETCH };
@@ -105,11 +99,12 @@ export function discordWithdrawFundsAlertIndexer(
       projectId,
       projectTitle,
       amount,
+      withdrawnFunds,
       time,
     }) {
       const {
         connections: { sql, discord },
-        context: { ignored, cexplorerUrl, teikiHost },
+        context: { cexplorerUrl, teikiHost },
       } = this;
       try {
         const { channelId } = this.context;
@@ -124,6 +119,11 @@ export function discordWithdrawFundsAlertIndexer(
           .addFields({
             name: "Amount",
             value: `${shortenNumber(amount, { shift: -6 })} ₳`,
+            inline: true,
+          })
+          .addFields({
+            name: "Total withdrawn funds",
+            value: `${shortenNumber(withdrawnFunds, { shift: -6 })} ₳`,
             inline: true,
           })
           .setTimestamp(time);
@@ -153,13 +153,13 @@ export function discordWithdrawFundsAlertIndexer(
 
         // TODO: Error handling?
         await sql`
-          INSERT INTO discord.withdraw_funds_alert ${sql([{ txId, projectId }])}
+          INSERT INTO discord.withdraw_funds_alert ${sql([{ projectId, txId }])}
             ON CONFLICT DO NOTHING
         `;
       } catch (error) {
         // TODO: Better log here
         console.error("ERROR:", id, error);
-        ignored.push(id);
+        this.retry();
       }
     },
   });
