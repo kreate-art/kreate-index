@@ -7,7 +7,7 @@ import { assert } from "@teiki/protocol/utils";
 import { $setup } from "../../framework/base";
 import { createPollingIndexer, PollingIndexer } from "../../framework/polling";
 
-import { ConnectionsWithDiscord, DiscordAlertContext } from ".";
+import { VitalDiscordConnections, DiscordAlertContext } from "./base";
 
 type ProjectId = string;
 type Task = {
@@ -33,7 +33,7 @@ discordDelegationAlertIndexer.setup = $setup(async ({ sql }) => {
 });
 
 export function discordDelegationAlertIndexer(
-  connections: ConnectionsWithDiscord
+  connections: VitalDiscordConnections
 ): PollingIndexer<DiscordAlertContext> {
   return createPollingIndexer({
     name: "discord.delegation_alert",

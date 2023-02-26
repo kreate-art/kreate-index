@@ -1,15 +1,18 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
+import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  CacheType,
+  Events,
+  Interaction,
+} from "discord.js";
 
 import { assert } from "@teiki/protocol/utils";
 
 import { $setup } from "../../framework/base";
 import { createPollingIndexer, PollingIndexer } from "../../framework/polling";
 
-import {
-  ConnectionsWithDiscord,
-  DiscordAlertContext,
-  startDiscordBotInteractionListener,
-} from ".";
+import { VitalDiscordConnections, DiscordAlertContext } from "./base";
 
 type ProjectId = string;
 type Task = { projectId: ProjectId; customUrl: string | null };
@@ -26,8 +29,8 @@ discordProjectAlertIndexer.setup = $setup(async ({ sql }) => {
 });
 
 export function discordProjectAlertIndexer(
-  connections: ConnectionsWithDiscord
-): PollingIndexer<DiscordAlertContext> {
+  connections: VitalDiscordConnections
+): PollingIndexer<DiscordAlertContext & { interactionCleanup?: () => void }> {
   return createPollingIndexer({
     name: "discord.project_alert",
     connections,
@@ -37,7 +40,15 @@ export function discordProjectAlertIndexer(
     $id: ({ projectId }: Task) => projectId,
 
     initialize: function () {
-      startDiscordBotInteractionListener(this.connections, this.context);
+      this.context.interactionCleanup = startDiscordBotInteractionListener(
+        "discord.project_alert:interaction",
+        this.connections,
+        this.context
+      );
+    },
+
+    finalize: function () {
+      this.context.interactionCleanup?.();
     },
 
     fetch: async function () {
@@ -110,4 +121,59 @@ export function discordProjectAlertIndexer(
       }
     },
   });
+}
+
+function startDiscordBotInteractionListener(
+  name: string,
+  { sql, discord }: VitalDiscordConnections,
+  { channelId }: DiscordAlertContext
+) {
+  async function onInteractionCreate(i: Interaction<CacheType>) {
+    try {
+      if (i.isButton()) {
+        if (i.channelId !== channelId) return;
+
+        const [action, projectId] = i.customId.split("-");
+        const actionUser = `${i.member?.user.username}#${i.member?.user.discriminator}`;
+
+        switch (action) {
+          case "unblock":
+            await sql`
+            DELETE FROM
+              ADMIN.blocked_project
+            WHERE
+              project_id = ${projectId};
+          `;
+            await i.update({
+              content: `${i.message.content} \n\n Unblocked by ${actionUser}`,
+              components: i.message.components,
+            });
+            return;
+          case "block":
+            await sql`
+            INSERT INTO
+              admin.blocked_project ${sql({ projectId })}
+            ON CONFLICT DO NOTHING
+          `;
+            await i.update({
+              content: `${i.message.content} \n\n Blocked by ${actionUser}`,
+              components: i.message.components,
+            });
+            return;
+          default:
+            return;
+        }
+      }
+    } catch (e) {
+      // FIXME: Proper error handling!
+      // We are catching to keep the bot alive.
+      console.error(e);
+    }
+  }
+  console.log(`[${name}] Listen for interactions on: ${channelId}`);
+  discord.on(Events.InteractionCreate, onInteractionCreate);
+  return () => {
+    console.log(`[${name}] Unlisten interactions on: ${channelId}`);
+    discord.off(Events.InteractionCreate, onInteractionCreate);
+  };
 }

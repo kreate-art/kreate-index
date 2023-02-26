@@ -8,7 +8,7 @@ import { $setup } from "../../framework/base";
 import { createPollingIndexer, PollingIndexer } from "../../framework/polling";
 import { shortenNumber } from "../../utils";
 
-import { ConnectionsWithDiscord, DiscordAlertContext } from ".";
+import { VitalDiscordConnections, DiscordAlertContext } from "./base";
 
 type ProjectId = string;
 type Task = {
@@ -35,7 +35,7 @@ discordWithdrawFundsAlertIndexer.setup = $setup(async ({ sql }) => {
 });
 
 export function discordWithdrawFundsAlertIndexer(
-  connections: ConnectionsWithDiscord
+  connections: VitalDiscordConnections
 ): PollingIndexer<DiscordAlertContext> {
   return createPollingIndexer({
     name: "discord.withdraw_funds_alert",

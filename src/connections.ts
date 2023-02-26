@@ -151,7 +151,11 @@ register("discord", {
       partials: [discord.Partials.Channel],
     });
     const { DISCORD_BOT_TOKEN } = config.discord();
+    client.once(discord.Events.ClientReady, async (c) =>
+      console.log(`<discord> Logged in as ${c.user.tag}!`)
+    );
     await client.login(DISCORD_BOT_TOKEN);
+
     return client;
   },
   disconnect: (self) => self.destroy(),

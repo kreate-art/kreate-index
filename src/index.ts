@@ -9,7 +9,7 @@ import { aiOcrIndexer } from "./indexers/ai/ocr";
 import { aiPodcastIndexer } from "./indexers/ai/podcast";
 import { aiProjectModerationIndexer } from "./indexers/ai/project-moderation";
 import { getChainIndexer } from "./indexers/chain";
-import { createDiscordAlertContext } from "./indexers/discord";
+import { createDiscordAlertContext } from "./indexers/discord/base";
 import { discordBackingAlertIndexer } from "./indexers/discord/backing";
 import { discordDelegationAlertIndexer } from "./indexers/discord/delegation";
 import { discordProjectAlertIndexer } from "./indexers/discord/project";

@@ -39,6 +39,7 @@ type PollingIndexParams<Context, Connections extends VitalConnections, Task> = {
   connections: Connections;
   $id: (task: Task) => TaskId;
   initialize?: (this: PollingThis<Context, Connections>) => MaybePromise<void>;
+  finalize?: (this: PollingThis<Context, Connections>) => MaybePromise<void>;
   fetch: (
     this: PollingThis<Context, Connections>,
     trigger: PollingTrigger
@@ -80,6 +81,7 @@ export function createPollingIndexer<
   connections,
   $id,
   initialize,
+  finalize,
   fetch,
   handle,
   batch,
@@ -91,7 +93,7 @@ export function createPollingIndexer<
   concurrency,
   onError,
 }: PollingIndexParams<Context, Connections, Task>): PollingIndexer<Context> {
-  let finalize: (() => Promise<void>) | null = null;
+  let shutdown: (() => Promise<void>) | null = null;
 
   // To prevent things from exploding, we disallow unbounded queue.
   // Therefore, undefined or 0 means the polling indexer will wait
@@ -100,7 +102,7 @@ export function createPollingIndexer<
   const workerConcurrency = concurrency?.workers ?? 8;
 
   async function start(context: Context) {
-    if (finalize) {
+    if (shutdown) {
       console.warn(`[${name}] Already started.`);
       return;
     }
@@ -119,7 +121,7 @@ export function createPollingIndexer<
     }
 
     const errorCallback = reduceErrorHandler(onError, async (error) => {
-      finalize && (await finalize());
+      shutdown && (await shutdown());
       throw error;
     });
     const pollingQueue = fastq.promise(doPoll, 1);
@@ -203,13 +205,14 @@ export function createPollingIndexer<
 
     console.log(`[${name}] Started!`);
 
-    finalize = async () => {
+    shutdown = async () => {
       console.log(`[${name}] Stopping...`);
       clearScheduled();
       pollingQueue.killAndDrain();
       taskQueue.kill(); // We don't want to trigger the continuation here
       await Promise.all(unlistens.map((un) => un()));
-      finalize = null;
+      if (finalize) await finalize?.call(self);
+      shutdown = null;
       console.log(`[${name}] Stopped...`);
     };
 
@@ -221,7 +224,7 @@ export function createPollingIndexer<
     async function doPoll(trigger: PollingTrigger) {
       clearScheduled();
 
-      if (finalize == null) return;
+      if (shutdown == null) return;
 
       const now = new Date();
       lastExecution = +now;
@@ -303,7 +306,7 @@ export function createPollingIndexer<
   }
 
   async function stop() {
-    if (finalize) finalize();
+    if (shutdown) shutdown();
     else console.error(`[${name}] Already stopped.`);
   }
 

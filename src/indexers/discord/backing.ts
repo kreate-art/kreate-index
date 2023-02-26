@@ -9,7 +9,7 @@ import { createPollingIndexer, PollingIndexer } from "../../framework/polling";
 import { BackingActionType } from "../../types/backing";
 import { shortenNumber } from "../../utils";
 
-import { ConnectionsWithDiscord, DiscordAlertContext } from ".";
+import { VitalDiscordConnections, DiscordAlertContext } from "./base";
 
 type ProjectId = string;
 type Task = {
@@ -39,7 +39,7 @@ discordBackingAlertIndexer.setup = $setup(async ({ sql }) => {
 });
 
 export function discordBackingAlertIndexer(
-  connections: ConnectionsWithDiscord
+  connections: VitalDiscordConnections
 ): PollingIndexer<DiscordAlertContext> {
   return createPollingIndexer({
     name: "discord.backing_alert",
