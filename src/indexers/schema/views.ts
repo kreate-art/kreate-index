@@ -156,7 +156,7 @@ async function setupProjectSummaryMatView(sql: Sql) {
           INNER JOIN chain.output o ON p.id = o.id
         WHERE
           o.spent_slot IS NULL
-          AND NOT EXISTS(
+          AND NOT EXISTS (
             SELECT FROM admin.blocked_project bp
             WHERE bp.project_id = p.project_id
           )
