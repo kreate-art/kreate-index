@@ -47,6 +47,7 @@ export function loadConfig(rawConfig: TeikiChainIndexYamlConfig) {
         (mph) => `${mph}.${PROJECT_AT_TOKEN_NAMES.PROJECT_SCRIPT}`
       ),
     },
+    mphProofOfBackings: scripts.mpProofOfBacking,
     assetsProofOfBacking: {
       seed: scripts.mpProofOfBacking.map(
         (mph) => `${mph}.${PROOF_OF_BACKING_TOKEN_NAMES.SEED}`

@@ -1,9 +1,15 @@
 import * as O from "@cardano-ogmios/schema";
 import { Address, TxHash } from "lucid-cardano";
+import * as L from "lucid-cardano";
 
-import { deconstructAddress } from "@teiki/protocol/helpers/schema";
+import {
+  constructAddress,
+  constructTxOutputId,
+  deconstructAddress,
+  constructPlantHashUsingBlake2b,
+} from "@teiki/protocol/helpers/schema";
 import * as S from "@teiki/protocol/schema";
-import { BackingDatum } from "@teiki/protocol/schema/teiki/backing";
+import { BackingDatum, Plant } from "@teiki/protocol/schema/teiki/backing";
 import { Hex, UnixTime } from "@teiki/protocol/types";
 import { assert } from "@teiki/protocol/utils";
 
@@ -37,13 +43,14 @@ export type ChainBackingAction = {
   txId: TxHash;
 };
 
-export type Event = { type: "backing"; indicies: NonEmpty<number[]> | null };
+export type Event = {
+  type: "backing";
+  indicies: NonEmpty<number[]> | null;
+  claimedFlowerHashes: NonEmpty<string[]> | null;
+};
 const $ = $handlers<TeikiChainIndexContext, Event>();
 
 export const setup = $.setup(async ({ sql }) => {
-  // TODO: Rename staked_at => backed_at in contracts
-  // TODO: Rename unstaked_at => unbacked_at in contracts
-  // TODO: Rename unstake => unback in contracts
   await sql`
     CREATE TABLE IF NOT EXISTS chain.backing (
       id bigint PRIMARY KEY REFERENCES chain.output (id) ON DELETE CASCADE,
@@ -109,6 +116,27 @@ export const setup = $.setup(async ({ sql }) => {
     CREATE INDEX IF NOT EXISTS backing_action_tx_id_index
       ON chain.backing_action(tx_id)
   `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS chain.proof_of_backing (
+      id bigint PRIMARY KEY REFERENCES chain.output (id) ON DELETE CASCADE,
+      slot integer NOT NULL REFERENCES chain.block (slot) ON DELETE CASCADE, -- plant slot
+      is_matured boolean NOT NULL,
+      hash varchar(64) NOT NULL,
+      mph varchar(64) NOT NULL
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS flower_slot_index
+      ON chain.proof_of_backing(slot)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS flower_is_matured_index
+      ON chain.proof_of_backing(is_matured)
+  `;
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS flower_hash_mph_index
+      ON chain.proof_of_backing(hash, mph)
+  `;
 });
 
 export const filter = $.filter(
@@ -117,6 +145,7 @@ export const filter = $.filter(
     context: {
       config: {
         assetsProofOfBacking: { seed, wilted },
+        mphProofOfBackings,
       },
     },
   }) => {
@@ -127,13 +156,35 @@ export const filter = $.filter(
         backingIndicies.push(index);
     }
     if (backingIndicies.length) {
-      return [{ type: "backing", indicies: backingIndicies }];
+      return [
+        {
+          type: "backing",
+          indicies: backingIndicies,
+          claimedFlowerHashes: null,
+        },
+      ];
     } else {
       const minted = tx.body.mint.assets;
       if (minted) {
         const isMinted = (a: string) => minted[a];
         if (seed.some(isMinted) || wilted.some(isMinted))
-          return [{ type: "backing", indicies: null }];
+          return [
+            { type: "backing", indicies: null, claimedFlowerHashes: null },
+          ];
+
+        // Since we have already checked for seed and wilted,
+        // focusing solely on verifying the minting policy should suffice for now.
+        const claimedFlowerHashes: string[] = [];
+        for (const [asset, amount] of Object.entries(minted)) {
+          if (amount !== -1n) continue;
+          for (const mph of mphProofOfBackings) {
+            const [currentMph, tokenName] = asset.split(".");
+            if (currentMph === mph) claimedFlowerHashes.push(tokenName);
+          }
+        }
+
+        if (claimedFlowerHashes.length > 0)
+          return [{ type: "backing", indicies: null, claimedFlowerHashes }];
       }
     }
     return null;
@@ -146,33 +197,161 @@ export const event = $.event(
     connections: { sql, lucid, slotTimeInterpreter },
     block: { slot, time },
     tx,
-    event: { indicies },
+    event: { indicies, claimedFlowerHashes },
+    context: {
+      config: { mphProofOfBackings },
+    },
   }) => {
     const txTimeStart = slotTimeInterpreter.slotToAbsoluteTime(
       tx.body.validityInterval.invalidBefore ?? slot
     );
+    const mintedAssets = tx.body.mint.assets;
     const message = extractCip20Message(tx)?.join("\n") || null;
+    const backingActions: ChainBackingAction[] = [];
+    const txId = tx.id;
 
-    const unbackRows = await sql<
-      { projectId: Hex; amount: Lovelace; address: Address }[]
+    if (claimedFlowerHashes) {
+      const backingActions: ChainBackingAction[] = [];
+
+      const chainBackingWithOutputIds = await sql<
+        (ChainBacking & {
+          txId: L.TxHash;
+          txIx: number;
+          id: bigint;
+          mph: string;
+        })[]
+      >`
+        SELECT
+          o.tx_id, o.tx_ix, o.id, f.mph as mph,
+          b.*
+        FROM
+          chain.backing b
+          INNER JOIN chain.output o ON o.id = b.id
+          INNER JOIN chain.proof_of_backing pob ON pob.id = b.id
+        WHERE
+          (pob.hash) IN ${sql(claimedFlowerHashes)}
+          AND !pob.is_matured
+      `;
+      for (const chainBacking of chainBackingWithOutputIds) {
+        const plant: Plant = {
+          isMatured: false,
+          backingOutputId: constructTxOutputId({
+            txHash: chainBacking.txId,
+            outputIndex: Number(chainBacking.txIx),
+          }),
+          backingAmount: BigInt(chainBacking.backingAmount),
+          unbackedAt: { timestamp: BigInt(txTimeStart) },
+          projectId: { id: chainBacking.projectId },
+          backerAddress: constructAddress(chainBacking.backerAddress),
+          backedAt: { timestamp: BigInt(chainBacking.backedAt) },
+          milestoneBacked: BigInt(chainBacking.milestoneBacked),
+        };
+
+        const fruitHash = constructPlantHashUsingBlake2b({
+          ...plant,
+          isMatured: true,
+        });
+        if (
+          mintedAssets != null &&
+          mintedAssets[chainBacking.mph + "." + fruitHash] === 1n
+        ) {
+          await sql`INSERT INTO chain.proof_of_backing ${sql({
+            id: chainBacking.id,
+            slot,
+            isMatured: true,
+            mph: chainBacking.mph,
+            hash: fruitHash,
+          })}`;
+
+          backingActions.push({
+            action: "claim_rewards",
+            projectId: chainBacking.projectId,
+            actorAddress: chainBacking.backerAddress, // TODO: incorrect here
+            amount: 0n,
+            time, // block time at which executed the action
+            message: null,
+            slot,
+            txId: txId,
+          });
+        }
+      }
+    }
+
+    const chainBackingWithOutputIds = await sql<
+      (ChainBacking & { txId: L.TxHash; txIx: number; id: bigint })[]
     >`
-      SELECT
-        SUM(b.backing_amount)::bigint AS amount,
-        b.project_id,
-        b.backer_address AS address
-      FROM chain.backing b
-        INNER JOIN chain.output o ON b.id = o.id
-      WHERE (o.tx_id, o.tx_ix) IN ${sql(
-        tx.body.inputs.map((input) => sql([input.txId, input.index]))
-      )}
-      GROUP BY
-        (b.project_id, b.backer_address)
-    `;
+        SELECT
+          o.tx_id, o.tx_ix, o.id,
+          b.*
+        FROM
+          chain.backing b
+          INNER JOIN chain.output o ON o.id = b.id
+        WHERE
+          (o.tx_id, o.tx_ix) IN ${sql(
+            tx.body.inputs.map((input) => sql([input.txId, input.index]))
+          )}
+      `;
 
     const actionRef = new Map<string, { unback: Lovelace; back: Lovelace }>();
-    for (const row of unbackRows) {
-      const key = `${row.projectId}|${row.address}`;
-      actionRef.set(key, { unback: row.amount, back: 0n });
+
+    for (const chainBacking of chainBackingWithOutputIds) {
+      const key = `${chainBacking.projectId}|${chainBacking.backerAddress}`;
+      const ref = actionRef.get(key);
+      actionRef.set(
+        key,
+        ref
+          ? {
+              unback: chainBacking.backingAmount + ref.unback,
+              back: ref.back,
+            }
+          : {
+              unback: chainBacking.backingAmount,
+              back: 0n,
+            }
+      );
+
+      const plant: Plant = {
+        isMatured: false,
+        backingOutputId: constructTxOutputId({
+          txHash: chainBacking.txId,
+          outputIndex: Number(chainBacking.txIx),
+        }),
+        backingAmount: BigInt(chainBacking.backingAmount),
+        unbackedAt: { timestamp: BigInt(txTimeStart) },
+        projectId: { id: chainBacking.projectId },
+        backerAddress: constructAddress(chainBacking.backerAddress),
+        backedAt: { timestamp: BigInt(chainBacking.backedAt) },
+        milestoneBacked: BigInt(chainBacking.milestoneBacked),
+      };
+
+      const flowerHash = constructPlantHashUsingBlake2b(plant);
+      const fruitHash = constructPlantHashUsingBlake2b({
+        ...plant,
+        isMatured: true,
+      });
+
+      if (mintedAssets != null) {
+        for (const mphProofOfBacking of mphProofOfBackings) {
+          if (mintedAssets[mphProofOfBacking + "." + flowerHash] === 1n) {
+            await sql`INSERT INTO chain.proof_of_backing ${sql({
+              id: chainBacking.id,
+              slot,
+              isMatured: false,
+              mph: mphProofOfBacking,
+              hash: flowerHash,
+            })}`;
+          }
+          if (mintedAssets[mphProofOfBacking + "." + fruitHash] === 1n) {
+            await sql`INSERT INTO chain.proof_of_backing ${sql({
+              id: chainBacking.id,
+              slot,
+              isMatured: true,
+              mph: mphProofOfBacking,
+              hash: fruitHash,
+            })}`;
+          }
+        }
+      }
     }
 
     if (indicies != null) {
@@ -219,12 +398,12 @@ export const event = $.event(
       else console.warn("there is no valid backing");
     }
 
-    const backingActions: ChainBackingAction[] = [];
-    const txId = tx.id;
     for (const [key, value] of actionRef.entries()) {
       const [projectId, actorAddress] = key.split("|");
       const delta = value.back - value.unback;
-      const action = delta > 0n ? "back" : "unback";
+      let action: BackingActionType;
+      if (delta === 0n) action = "claim_rewards";
+      else action = delta > 0n ? "back" : "unback";
 
       backingActions.push({
         action,
@@ -251,10 +430,10 @@ function extractCip20Message(tx: O.TxBabbage): string[] | null {
   if (metadatum != null && "map" in metadatum)
     for (const { k, v } of metadatum.map)
       if ("string" in k && k.string === "msg") {
-        assert("list" in v, "374.msg must be a list");
+        assert("list" in v, "674.msg must be a list");
         const result = [];
         for (const e of v.list) {
-          assert("string" in e, "374.msg elements must be strings");
+          assert("string" in e, "674.msg elements must be strings");
           result.push(e.string);
         }
         return result;
