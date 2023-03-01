@@ -115,11 +115,15 @@ export function aiProjectModerationIndexer(
               pi.summary AS summary,
               array_to_string(pi.tags, ' ') AS tags,
               pi.description AS description,
-              string_agg(coalesce(r ->> 'name', ''), ' ') || ' ' || string_agg(coalesce(r ->> 'description', ''), ' ') AS roadmap,
+              string_agg(coalesce(r.o ->> 'name', ''), ' ') || ' ' || string_agg(coalesce(r.o ->> 'description', ''), ' ') AS roadmap,
               string_agg(coalesce(f ->> 'question', ''), ' ') || ' ' || string_agg(coalesce(f ->> 'answer', ''), ' ') AS faq
             FROM
               ipfs.project_info pi
-              LEFT JOIN LATERAL jsonb_array_elements(pi.contents #> '{data, roadmap}') r ON TRUE
+              LEFT JOIN LATERAL (
+                SELECT jsonb_array_elements(pi.contents #> '{data, roadmap}') WHERE jsonb_typeof(pi.contents #> '{data, roadmap}') = 'array'
+                UNION ALL
+                SELECT jsonb_array_elements(pi.contents #> '{data, roadmap, milestones}') WHERE jsonb_typeof(pi.contents #> '{data, roadmap, milestones}') = 'array'
+              ) r(o) ON TRUE
               LEFT JOIN LATERAL jsonb_array_elements(pi.contents #> '{data, community, frequentlyAskedQuestions}') f ON TRUE
             GROUP BY
               pi.cid
