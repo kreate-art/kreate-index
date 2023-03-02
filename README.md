@@ -1,6 +1,6 @@
 # teiki-index
 
-Teiki index implementation in Generation I
+This repository contains the Teiki index implementation in Generation I.
 
 ## Docker
 
@@ -14,14 +14,14 @@ docker buildx build \
 
 ### Run
 
-teiki-index depends on a few other services:
+Teiki Index depends on a few other services:
 
 - cardano-node (https://github.com/input-output-hk/cardano-node)
 - ogmios (https://github.com/CardanoSolutions/ogmios)
 - ipfs (https://github.com/ipfs/kubo)
 - A PostgreSQL database
 
-A minimal, working setup to get those services up and running is defined in `docker-compose.yml`.
+A minimal working setup to get those services up and running is defined in `docker-compose.yml`.
 
 ```sh
 # Start (teiki-index and required services)
@@ -45,4 +45,4 @@ npm run start all
 
 ---
 
-Please feel free to connect: [Website](https://teiki.network), [Medium](https://teikinetwork.medium.com), [Discord](https://discord.gg/Nfs2Wbr28H), [Twitter](https://twitter.com/TeikiNetwork), [Telegram](https://t.me/teiki_announcement). We are very open to discussions, questions, and feedback :seedling:.
+Feel free to connect: [Website](https://teiki.network), [Medium](https://teikinetwork.medium.com), [Discord](https://discord.gg/n9wZZTY6XA), [Twitter](https://twitter.com/TeikiNetwork), [Telegram](https://t.me/teiki_announcement). We are very open to discussions, questions, and feedback :seedling:.
