@@ -6,10 +6,12 @@ import { assert } from "@teiki/protocol/utils";
 
 import { $setup } from "../../framework/base";
 import { createPollingIndexer, PollingIndexer } from "../../framework/polling";
+import { Lovelace } from "../../types/chain";
 import { WithId } from "../../types/typelevel";
 import { DISPLAYED_SCOPE, ProjectUpdateScope } from "../../types/update";
+import { shortenNumber } from "../../utils";
 
-import { ConnectionsWithDiscord, DiscordAlertContext } from ".";
+import { DiscordAlertContext, VitalDiscordConnections } from "./base";
 
 type ProjectId = string;
 type Task = {
@@ -17,8 +19,9 @@ type Task = {
   projectId: ProjectId;
   time: UnixTime;
   projectTitle: string;
+  sponsorshipAmount: Lovelace;
   // Project update scope
-  roadmap: boolean;
+  benefits: boolean;
   community: boolean;
   description: boolean;
   tags: boolean;
@@ -28,6 +31,7 @@ type Task = {
   customUrl: boolean;
   logoImage: boolean;
   coverImages: boolean;
+  sponsorship: boolean;
 };
 type ProjectUpdateAlertKey = string; // projectId|txId
 
@@ -36,8 +40,8 @@ const TASKS_PER_FETCH = 8;
 discordProjectUpdateAlertIndexer.setup = $setup(async ({ sql }) => {
   await sql`
     CREATE TABLE IF NOT EXISTS discord.project_update_alert (
-      tx_id TEXT NOT NULL,
-      project_id TEXT NOT NULL,
+      tx_id varchar(64) NOT NULL,
+      project_id varchar(64) NOT NULL,
       completed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       PRIMARY KEY (project_id, tx_id)
     )
@@ -45,7 +49,7 @@ discordProjectUpdateAlertIndexer.setup = $setup(async ({ sql }) => {
 });
 
 export function discordProjectUpdateAlertIndexer(
-  connections: ConnectionsWithDiscord
+  connections: VitalDiscordConnections
 ): PollingIndexer<DiscordAlertContext> {
   return createPollingIndexer({
     name: "discord.project_update_alert",
@@ -64,15 +68,23 @@ export function discordProjectUpdateAlertIndexer(
         WITH update_list AS (
           SELECT * FROM (
             SELECT
-              pd.id,
-              pd.project_id,
-              pd.information_cid,
-              LAG(information_cid) OVER (PARTITION BY pd.project_id ORDER BY pd.id) AS prev_information_cid
-            FROM chain.project_detail pd
+              id,
+              project_id,
+              information_cid,
+              sponsorship_amount,
+              sponsorship_until,
+              LAG(information_cid) OVER w AS prev_information_cid,
+              LAG(sponsorship_amount) OVER w AS prev_sponsorship_amount,
+              LAG(sponsorship_until) OVER w AS prev_sponsorship_until
+            FROM chain.project_detail
+            WINDOW w AS (PARTITION BY project_id ORDER BY id)
           ) AS _a
-          WHERE information_cid IS DISTINCT FROM prev_information_cid
+          WHERE
+            information_cid IS DISTINCT FROM prev_information_cid
+              OR sponsorship_amount IS DISTINCT FROM prev_sponsorship_amount
+              OR sponsorship_until IS DISTINCT FROM prev_sponsorship_until
         ),
-        update_list_prev_contents AS (
+        update_list_with_prev_contents AS (
           SELECT
             ul.*,
             pi2.contents AS contents,
@@ -85,20 +97,20 @@ export function discordProjectUpdateAlertIndexer(
         ),
         x AS (
           SELECT
-            ulpc.*,
+            ulwpc.*,
             o.tx_id,
             b.time
           FROM
-            update_list_prev_contents ulpc
+            update_list_with_prev_contents ulwpc
             INNER JOIN chain.output o
-              ON o.id = ulpc.id
+              ON o.id = ulwpc.id
             INNER JOIN chain.block b
               ON b.slot = o.created_slot
             WHERE
               NOT EXISTS (
                 SELECT FROM discord.project_update_alert dpua
                 WHERE
-                  (ulpc.project_id, o.tx_id) = (dpua.project_id, dpua.tx_id)
+                  (ulwpc.project_id, o.tx_id) = (dpua.project_id, dpua.tx_id)
               )
         )
         SELECT
@@ -106,7 +118,8 @@ export function discordProjectUpdateAlertIndexer(
           x.tx_id,
           x.title AS project_title,
           x.time,
-          (x.contents #> '{data, roadmap}' IS DISTINCT FROM x.prev_contents #> '{data, roadmap}') AS roadmap,
+          x.sponsorship_amount,
+          (x.contents #> '{data, benefits}' IS DISTINCT FROM x.prev_contents #> '{data, benefits}') AS benefits,
           (x.contents #> '{data, community}' IS DISTINCT FROM x.prev_contents #> '{data, community}') AS community,
           (x.contents #> '{data, description}' IS DISTINCT FROM x.prev_contents #> '{data, description}') AS description,
           (x.contents #> '{data, basics, tags}' IS DISTINCT FROM x.prev_contents #> '{data, basics, tags}') AS tags,
@@ -115,11 +128,14 @@ export function discordProjectUpdateAlertIndexer(
           (x.contents #> '{data, basics, summary}' IS DISTINCT FROM x.prev_contents #> '{data, basics, summary}') AS summary,
           (x.contents #> '{data, basics, customUrl}' IS DISTINCT FROM x.prev_contents #> '{data, basics, customUrl}') AS custom_url,
           (x.contents #> '{data, basics, logoImage}' IS DISTINCT FROM x.prev_contents #> '{data, basics, logoImage}') AS logo_image,
-          (x.contents #> '{data, basics, coverImages}' IS DISTINCT FROM x.prev_contents #> '{data, basics, coverImages}') AS cover_images
+          (x.contents #> '{data, basics, coverImages}' IS DISTINCT FROM x.prev_contents #> '{data, basics, coverImages}') AS cover_images,
+          (x.sponsorship_amount IS DISTINCT FROM x.prev_sponsorship_amount
+            OR x.sponsorship_until IS DISTINCT FROM x.prev_sponsorship_until) AS sponsorship
         FROM x
         WHERE
-          x.contents IS DISTINCT FROM x.prev_contents
-          AND x.prev_contents IS NOT NULL
+          x.prev_contents IS NOT NULL
+        ORDER BY
+          x.id
         LIMIT ${TASKS_PER_FETCH}
       `;
       return { tasks, continue: tasks.length >= TASKS_PER_FETCH };
@@ -134,12 +150,19 @@ export function discordProjectUpdateAlertIndexer(
         const { channelId } = this.context;
         // Limited at 256 characters
         const formattedProjectTitle = task.projectTitle.replace(
-          /(.{120})..+/,
+          /(.{100})..+/,
           "$1..."
         );
         const scope = ProjectUpdateScope.filter((item) => !!task[item]).map(
           (item) => DISPLAYED_SCOPE[item]
         );
+        if (task.sponsorship) {
+          scope.push(
+            `sponsorship to ${shortenNumber(task.sponsorshipAmount, {
+              shift: -6,
+            })} ₳`
+          );
+        }
 
         const embed = new EmbedBuilder()
           .setColor(0xf74055)
