@@ -123,6 +123,8 @@ export function aiProjectModerationIndexer(
                 SELECT jsonb_array_elements(pi.contents #> '{data, roadmap}') WHERE jsonb_typeof(pi.contents #> '{data, roadmap}') = 'array'
                 UNION ALL
                 SELECT jsonb_array_elements(pi.contents #> '{data, roadmap, milestones}') WHERE jsonb_typeof(pi.contents #> '{data, roadmap, milestones}') = 'array'
+                UNION ALL
+                SELECT jsonb_array_elements(pi.contents #> '{data, roadmapInfo, milestones}') WHERE jsonb_typeof(pi.contents #> '{data, roadmapInfo, milestones}') = 'array'
               ) r(o) ON TRUE
               LEFT JOIN LATERAL jsonb_array_elements(pi.contents #> '{data, community, frequentlyAskedQuestions}') f ON TRUE
             GROUP BY
