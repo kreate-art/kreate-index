@@ -7,13 +7,13 @@ export const ProjectUpdateScope = [
   "summary",
   "coverImages",
   "logoImage",
-  "roadmap",
+  "benefits",
   "community",
 ] as const;
 export type ProjectUpdateScope = (typeof ProjectUpdateScope)[number];
 export const DISPLAYED_SCOPE: Record<ProjectUpdateScope, string> = {
   description: "description",
-  roadmap: "roadmap",
+  benefits: "benefits",
   community: "community info",
   title: "title",
   slogan: "tagline",
