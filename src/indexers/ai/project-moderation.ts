@@ -166,9 +166,7 @@ export function aiProjectModerationIndexer(
       let description = undefined;
       if ("description" in data) {
         try {
-          description = extractDescriptionTexts(data.description, []).join(
-            "\n"
-          );
+          description = extractFromRichText(data.description, []).join("\n");
         } catch (error) {
           console.error(
             `[ai.content_moderation] Failed to extract text from description: ${cid}`,
@@ -180,7 +178,7 @@ export function aiProjectModerationIndexer(
       let benefits = undefined;
       if ("benefits" in data) {
         try {
-          benefits = extractDescriptionTexts(data.benefits, []).join("\n");
+          benefits = extractFromRichText(data.benefits, []).join("\n");
         } catch (error) {
           console.log(
             `[ai.content_moderation] Failed to extract text from benefits: ${cid}`,
@@ -194,7 +192,7 @@ export function aiProjectModerationIndexer(
         try {
           const _an = data.announcement;
           announcement = [
-            extractDescriptionTexts(_an?.body, []),
+            extractFromRichText(_an?.body, []),
             _an?.title ?? "",
             _an?.summary ?? "",
           ].join("\n");
@@ -303,14 +301,15 @@ async function callContentModeration(
   return { labels, error };
 }
 
-function extractDescriptionTexts(
+function extractFromRichText(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  jsonDescription: any,
+  jsonRichText: any,
   result: string[]
 ): string[] {
-  if (typeof jsonDescription?.text === "string")
-    result.push(jsonDescription?.text);
-  if (Array.isArray(jsonDescription?.content))
-    for (const c of jsonDescription.content) extractDescriptionTexts(c, result);
+  if (jsonRichText != null) {
+    if (typeof jsonRichText?.text === "string") result.push(jsonRichText?.text);
+    else if (Array.isArray(jsonRichText?.content))
+      for (const c of jsonRichText.content) extractFromRichText(c, result);
+  }
   return result;
 }
