@@ -28,7 +28,8 @@ ipfsProjectInfoIndexer.setup = $setup(async ({ sql }) => {
       custom_url text,
       tags text[] NOT NULL,
       summary text,
-      description jsonb
+      description jsonb,
+      benefits jsonb
     )
   `;
   await sql`
@@ -119,6 +120,7 @@ export function ipfsProjectInfoIndexer(
         tags: projectInfo?.data?.basics?.tags ?? [],
         summary: nullIfFalsy(projectInfo?.data?.basics?.summary),
         description: nullIfFalsy(projectInfo?.data?.description?.body),
+        benefits: nullIfFalsy(projectInfo?.data?.benefits?.perks),
       };
 
       if (projectInfo.bufs != null) {

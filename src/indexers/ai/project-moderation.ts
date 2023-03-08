@@ -36,8 +36,8 @@ const WEIGHTS = {
   summary: 3,
   tags: 2,
   description: 1,
+  benefits: 1,
   announcement: 3,
-  roadmap: 2,
   faq: 2,
   media: 3,
 };
@@ -55,7 +55,7 @@ type ProjectInfo = {
   tags: string;
   summary: string;
   description: AnyBufs;
-  roadmap: string;
+  benefits: AnyBufs;
   faq: string;
   media: string[]; // list of CIDs of project media
 };
@@ -122,15 +122,10 @@ export function aiProjectModerationIndexer(
               pi.summary AS summary,
               array_to_string(pi.tags, ' ') AS tags,
               pi.description AS description,
-              string_agg(coalesce(r.o ->> 'name', ''), ' ') || ' ' || string_agg(coalesce(r.o ->> 'description', ''), ' ') AS roadmap,
+              pi.benefits AS benefits,
               string_agg(coalesce(f ->> 'question', ''), ' ') || ' ' || string_agg(coalesce(f ->> 'answer', ''), ' ') AS faq
             FROM
               ipfs.project_info pi
-              LEFT JOIN LATERAL (
-                SELECT jsonb_array_elements(pi.contents #> '{data, roadmap}') WHERE jsonb_typeof(pi.contents #> '{data, roadmap}') = 'array'
-                UNION ALL
-                SELECT jsonb_array_elements(pi.contents #> '{data, roadmap, milestones}') WHERE jsonb_typeof(pi.contents #> '{data, roadmap, milestones}') = 'array'
-              ) r(o) ON TRUE
               LEFT JOIN LATERAL jsonb_array_elements(pi.contents #> '{data, community, frequentlyAskedQuestions}') f ON TRUE
             GROUP BY
               pi.cid
@@ -182,6 +177,18 @@ export function aiProjectModerationIndexer(
         }
       }
 
+      let benefits = undefined;
+      if ("benefits" in data) {
+        try {
+          benefits = extractDescriptionTexts(data.benefits, []).join("\n");
+        } catch (error) {
+          console.log(
+            `[ai.content_moderation] Failed to extract text from benefits: ${cid}`,
+            error
+          );
+        }
+      }
+
       let announcement = undefined;
       if ("announcement" in data) {
         try {
@@ -201,7 +208,7 @@ export function aiProjectModerationIndexer(
 
       const { labels, error } = await callContentModeration(
         cid,
-        { ...data, description, announcement },
+        { ...data, description, announcement, benefits },
         aiServerUrl,
         ipfsGatewayUrl
       );
