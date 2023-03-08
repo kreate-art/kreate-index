@@ -51,6 +51,7 @@ export function discordWithdrawFundsAlertIndexer(
     fetch: async function () {
       const {
         connections: { sql },
+        context: { discordIgnoredBefore },
       } = this;
       const tasks = await sql<Task[]>`
         SELECT
@@ -92,6 +93,11 @@ export function discordWithdrawFundsAlertIndexer(
             SELECT FROM discord.withdraw_funds_alert dwfa
             WHERE (dwfa.project_id, dwfa.tx_id) = (x.project_id, x.tx_id)
           )
+          AND ${
+            discordIgnoredBefore == null
+              ? sql`TRUE`
+              : sql`${discordIgnoredBefore}::timestamptz <= x.time`
+          }
         ORDER BY x.id
         LIMIT ${TASKS_PER_FETCH}
       `;

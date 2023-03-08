@@ -10,6 +10,7 @@ export type DiscordAlertContext = {
   shinkaRoleId: string;
   cexplorerUrl: string;
   teikiHost: string;
+  discordIgnoredBefore?: string;
 };
 
 export function createDiscordAlertContext(
@@ -20,5 +21,6 @@ export function createDiscordAlertContext(
     shinkaRoleId: config.discord().DISCORD_SHINKA_ROLE_ID,
     cexplorerUrl: config.cardano().CEXPLORER_URL,
     teikiHost: config.teiki().TEIKI_HOST,
+    discordIgnoredBefore: config.discord().DISCORD_IGNORED_BEFORE,
   };
 }
