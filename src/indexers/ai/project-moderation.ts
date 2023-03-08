@@ -8,38 +8,12 @@ import {
   PollingIndexer,
   VitalConnections,
 } from "../../framework/polling";
+import { ModerationLabels, ModerationWeights } from "../../types/moderation";
 import { objectEntries } from "../../utils";
 
 export type AiProjectModerationContext = {
   aiServerUrl: string;
   ipfsGatewayUrl: string;
-};
-
-const LABELS = [
-  "toxicity",
-  "obscene",
-  "identity_attack",
-  "insult",
-  "threat",
-  "sexual_explicit",
-  "political",
-  "discrimination",
-  "drug",
-  "gun",
-  "pornographic",
-];
-
-// Note: Adjust weights if needed
-const WEIGHTS = {
-  title: 5,
-  slogan: 4,
-  summary: 3,
-  tags: 2,
-  description: 1,
-  benefits: 1,
-  announcement: 3,
-  faq: 2,
-  media: 3,
 };
 
 // We might need to add more fields, depends on our moderation scope
@@ -217,7 +191,7 @@ export function aiProjectModerationIndexer(
             cid,
             error: null,
             ...Object.fromEntries(
-              LABELS.map((label) => [label, labels.get(label) ?? 0])
+              ModerationLabels.map((label) => [label, labels.get(label) ?? 0])
             ),
           })}
         `;
@@ -262,7 +236,10 @@ async function callContentModeration(
             assert(data != null, `Data must not be empty (${cid} | media)`);
             for (const rlabel of data.tags) {
               const label = rlabel.replace(" ", "_");
-              labels.set(label, (labels.get(label) ?? 0) + WEIGHTS[key]);
+              labels.set(
+                label,
+                (labels.get(label) ?? 0) + ModerationWeights[key]
+              );
             }
           } else {
             error = `Response: ${res.status} - ${
@@ -284,7 +261,10 @@ async function callContentModeration(
           assert(data != null, `Data must not be empty (${cid} | text)`);
           for (const rlabel of data.tags) {
             const label = rlabel.replace(" ", "_");
-            labels.set(label, (labels.get(label) ?? 0) + WEIGHTS[key]);
+            labels.set(
+              label,
+              (labels.get(label) ?? 0) + ModerationWeights[key]
+            );
           }
         } else {
           error = `Response: ${res.status} - ${

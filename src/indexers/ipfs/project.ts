@@ -156,6 +156,7 @@ export function ipfsProjectInfoIndexer(
         `;
 
       notifications.notify("discord.project_alert");
+      notifications.notify("discord.project_moderation_alert");
 
       if (customUrl != null) views.refresh("views.project_custom_url");
     },
