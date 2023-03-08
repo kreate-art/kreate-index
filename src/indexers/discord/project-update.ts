@@ -15,8 +15,8 @@ import { DiscordAlertContext, VitalDiscordConnections } from "./base";
 
 type ProjectId = string;
 type Task = {
-  txId: Hex;
   projectId: ProjectId;
+  txId: Hex;
   time: UnixTime;
   projectTitle: string;
   sponsorshipAmount: Lovelace;
@@ -35,13 +35,13 @@ type Task = {
 };
 type ProjectUpdateAlertKey = string; // projectId|txId
 
-const TASKS_PER_FETCH = 8;
+const TASKS_PER_FETCH = 20;
 
 discordProjectUpdateAlertIndexer.setup = $setup(async ({ sql }) => {
   await sql`
     CREATE TABLE IF NOT EXISTS discord.project_update_alert (
-      tx_id varchar(64) NOT NULL,
       project_id varchar(64) NOT NULL,
+      tx_id varchar(64) NOT NULL,
       completed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       PRIMARY KEY (project_id, tx_id)
     )
@@ -81,10 +81,10 @@ export function discordProjectUpdateAlertIndexer(
           ) AS _a
           WHERE
             information_cid IS DISTINCT FROM prev_information_cid
-              OR sponsorship_amount IS DISTINCT FROM prev_sponsorship_amount
-              OR sponsorship_until IS DISTINCT FROM prev_sponsorship_until
+            OR sponsorship_amount IS DISTINCT FROM prev_sponsorship_amount
+            OR sponsorship_until IS DISTINCT FROM prev_sponsorship_until
         ),
-        update_list_with_prev_contents AS (
+        update_list_prev AS (
           SELECT
             ul.*,
             pi2.contents AS contents,
@@ -93,24 +93,24 @@ export function discordProjectUpdateAlertIndexer(
           FROM
             update_list ul
           INNER JOIN ipfs.project_info pi2
-              ON pi2.cid = ul.information_cid
+            ON pi2.cid = ul.information_cid
         ),
         x AS (
           SELECT
-            ulwpc.*,
+            ulp.*,
             o.tx_id,
             b.time
           FROM
-            update_list_with_prev_contents ulwpc
+            update_list_prev ulp
             INNER JOIN chain.output o
-              ON o.id = ulwpc.id
+              ON o.id = ulp.id
             INNER JOIN chain.block b
               ON b.slot = o.created_slot
             WHERE
               NOT EXISTS (
                 SELECT FROM discord.project_update_alert dpua
                 WHERE
-                  (ulwpc.project_id, o.tx_id) = (dpua.project_id, dpua.tx_id)
+                  (ulp.project_id, o.tx_id) = (dpua.project_id, dpua.tx_id)
               )
         )
         SELECT
