@@ -1,5 +1,5 @@
-import { toJson } from "@teiki/protocol/json";
 import { Cid } from "@teiki/protocol/types";
+import { assert } from "@teiki/protocol/utils";
 
 import { $setup } from "../../framework/base";
 import {
@@ -71,8 +71,7 @@ export function aiOcrIndexer(
         });
         if (res.ok) {
           const data = await res.json();
-          if (data == null)
-            throw new Error(`Response invalid (${cid}): ${toJson(data)}`);
+          assert(data != null, `Data must not be empty (${cid})`);
           await sql`
             INSERT INTO ai.ocr ${sql({
               mediaCid: cid,
