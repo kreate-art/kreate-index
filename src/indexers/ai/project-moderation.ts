@@ -1,5 +1,6 @@
 import { toJson } from "@teiki/protocol/json";
 import { Cid } from "@teiki/protocol/types";
+import { assert } from "@teiki/protocol/utils";
 
 import { $setup } from "../../framework/base";
 import {
@@ -253,8 +254,7 @@ async function callContentModeration(
           });
           if (res.ok) {
             const data = await res.json();
-            if (data == null)
-              throw new Error(`Response invalid: ${toJson(data)}`);
+            assert(data != null, `Data must not be empty (${cid} | media)`);
             for (const rlabel of data.tags) {
               const label = rlabel.replace(" ", "_");
               labels.set(label, (labels.get(label) ?? 0) + WEIGHTS[key]);
@@ -276,8 +276,7 @@ async function callContentModeration(
         // Duplicated with the above code, refine if needed.
         if (res.ok) {
           const data = await res.json();
-          if (data == null)
-            throw new Error(`Response invalid: ${toJson(data)}`);
+          assert(data != null, `Data must not be empty (${cid} | text)`);
           for (const rlabel of data.tags) {
             const label = rlabel.replace(" ", "_");
             labels.set(label, (labels.get(label) ?? 0) + WEIGHTS[key]);
