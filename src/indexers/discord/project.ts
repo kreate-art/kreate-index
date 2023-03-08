@@ -54,21 +54,37 @@ export function discordProjectAlertIndexer(
     fetch: async function () {
       const {
         connections: { sql },
+        context: { discordIgnoredBefore },
       } = this;
       const tasks = await sql<Task[]>`
-        SELECT DISTINCT
-          d.project_id as project_id,
-          pi.custom_url as custom_url
-        FROM
-          chain.project_detail d
+        SELECT
+          pd.project_id,
+          pi.custom_url,
+          b.time
+        FROM chain.project_detail pd
+        INNER JOIN (
+          SELECT
+            project_id,
+            min(id) AS id
+          FROM chain.project_detail
+          GROUP BY project_id
+        ) x ON x.project_id = pd.project_id AND x.id = pd.id
         INNER JOIN
-          ipfs.project_info pi
-          ON d.information_cid = pi.cid
+          ipfs.project_info pi ON pi.cid = pd.information_cid
+        INNER JOIN
+          chain.output o ON o.id = pd.id
+        INNER JOIN
+          chain.block b ON b.slot = o.created_slot
         WHERE
           NOT EXISTS (
             SELECT FROM discord.project_alert dpa
-            WHERE dpa.project_id = d.project_id
+            WHERE dpa.project_id = pd.project_id
           )
+          AND ${
+            discordIgnoredBefore == null
+              ? sql`TRUE`
+              : sql`${discordIgnoredBefore}::timestamptz <= b.time`
+          }
         LIMIT ${TASKS_PER_FETCH}
       `;
       return { tasks, continue: tasks.length >= TASKS_PER_FETCH };

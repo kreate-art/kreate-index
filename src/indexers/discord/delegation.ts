@@ -47,6 +47,7 @@ export function discordDelegationAlertIndexer(
     fetch: async function () {
       const {
         connections: { sql },
+        context: { discordIgnoredBefore },
       } = this;
       const tasks = await sql<Task[]>`
         SELECT
@@ -88,6 +89,11 @@ export function discordDelegationAlertIndexer(
             SELECT FROM discord.delegation_alert dda
             WHERE (dda.project_id, dda.tx_id) = (x.project_id, x.tx_id)
           )
+          AND ${
+            discordIgnoredBefore == null
+              ? sql`TRUE`
+              : sql`${discordIgnoredBefore}::timestamptz <= x.time`
+          }
         ORDER BY x.id
         LIMIT ${TASKS_PER_FETCH}
       `;
