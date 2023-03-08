@@ -68,15 +68,17 @@ export function discordProjectUpdateAlertIndexer(
         WITH update_list AS (
           SELECT * FROM (
             SELECT
-              id,
-              project_id,
-              information_cid,
-              sponsorship_amount,
-              sponsorship_until,
-              LAG(information_cid) OVER w AS prev_information_cid,
-              LAG(sponsorship_amount) OVER w AS prev_sponsorship_amount,
-              LAG(sponsorship_until) OVER w AS prev_sponsorship_until
-            FROM chain.project_detail
+              pd.id,
+              pd.project_id,
+              pd.information_cid,
+              pd.sponsorship_amount,
+              pd.sponsorship_until,
+              LAG(pd.information_cid) OVER w AS prev_information_cid,
+              LAG(pd.sponsorship_amount) OVER w AS prev_sponsorship_amount,
+              LAG(pd.sponsorship_until) OVER w AS prev_sponsorship_until
+            FROM chain.project_detail pd
+            WHERE
+              EXISTS (SELECT FROM ipfs.project_info pi WHERE pi.cid = pd.information_cid)
             WINDOW w AS (PARTITION BY project_id ORDER BY id)
           ) AS _a
           WHERE

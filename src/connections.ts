@@ -13,6 +13,11 @@ import { createViewsController, ViewsController } from "./db/views";
 import { createOgmiosContextFactory, OgmiosContextFactory } from "./ogmios";
 import { MaybePromise } from "./types/typelevel";
 
+const DISCORD_NOTIFICATION_DEBOUNCE = 5000; // 5s
+const DISCORD_NOTIFICATION_OPTIONS_ENTRY = {
+  debounce: DISCORD_NOTIFICATION_DEBOUNCE,
+};
+
 export type AllConnections = {
   readonly sql: db.Sql;
   readonly ogmios: OgmiosContextFactory;
@@ -162,7 +167,16 @@ register("discord", {
 });
 
 register("notifications", {
-  connect: async () => createNotificationsService(await provideOne("sql")),
+  connect: async () =>
+    createNotificationsService(await provideOne("sql"), {
+      channels: {
+        "discord.project_alert": DISCORD_NOTIFICATION_OPTIONS_ENTRY,
+        "discord.backing_alert": DISCORD_NOTIFICATION_OPTIONS_ENTRY,
+        "discord.withdraw_funds_alert": DISCORD_NOTIFICATION_OPTIONS_ENTRY,
+        "discord.delegation_alert": DISCORD_NOTIFICATION_OPTIONS_ENTRY,
+        "discord.project_update_alert": DISCORD_NOTIFICATION_OPTIONS_ENTRY,
+      },
+    }),
   disconnect: (self) => self.shutdown(),
 });
 
