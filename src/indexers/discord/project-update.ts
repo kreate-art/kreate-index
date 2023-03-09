@@ -155,10 +155,9 @@ export function discordProjectUpdateAlertIndexer(
     handle: async function (task: WithId<Task, ProjectUpdateAlertKey>) {
       const {
         connections: { sql, discord },
-        context: { cexplorerUrl, teikiHost },
+        context: { channelId, cexplorerUrl, teikiHost },
       } = this;
       try {
-        const { channelId } = this.context;
         // Limited at 256 characters
         const formattedProjectTitle = task.projectTitle.replace(
           /(.{100})..+/,
