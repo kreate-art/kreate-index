@@ -115,10 +115,9 @@ export function discordWithdrawFundsAlertIndexer(
     }) {
       const {
         connections: { sql, discord },
-        context: { cexplorerUrl, teikiHost },
+        context: { channelId, cexplorerUrl, teikiHost },
       } = this;
       try {
-        const { channelId } = this.context;
         // Limited at 256 characters
         const formattedProjectTitle = projectTitle.replace(
           /(.{200})..+/,

@@ -94,7 +94,7 @@ export function discordProjectAlertIndexer(
     handle: async function ({ projectId, customUrl }) {
       const {
         connections: { sql, discord },
-        context: { teikiHost },
+        context: { channelId, shinkaRoleId, teikiHost },
       } = this;
       try {
         // NOTE: This function is copied from teiki-backend/src/indexer/project-info.ts
@@ -113,7 +113,6 @@ export function discordProjectAlertIndexer(
               .setStyle(ButtonStyle.Secondary)
           );
 
-        const { channelId, shinkaRoleId } = this.context;
         const channel = await discord.channels.fetch(channelId);
         assert(channel, `Channel ${channelId} not found`);
         assert("send" in channel, `Channel ${channelId} is not sendable`);
