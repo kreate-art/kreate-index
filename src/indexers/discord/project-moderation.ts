@@ -6,7 +6,10 @@ import { assert } from "@teiki/protocol/utils";
 
 import { $setup } from "../../framework/base";
 import { createPollingIndexer, PollingIndexer } from "../../framework/polling";
-import { DISPLAYED_LABELS, ModerationLabels } from "../../types/moderation";
+import {
+  DISPLAYED_LABELS,
+  MODERATION_LABELS,
+} from "../../types/project/moderation";
 import { WithId } from "../../types/typelevel";
 
 import { VitalDiscordConnections, DiscordAlertContext } from "./base";
@@ -127,7 +130,7 @@ export function discordProjectModerationAlertIndexer(
         // @sk-umiuma: we temporarily filter out these tags
         // as the returning verdict of these tags is unreliable
         const unstableLabels = ["political", "drug", "discrimination"];
-        const moderatedLabels = ModerationLabels.filter(
+        const moderatedLabels = MODERATION_LABELS.filter(
           (label) => !unstableLabels.includes(label) && !!task[label]
         ).map((item) => DISPLAYED_LABELS[item]);
 

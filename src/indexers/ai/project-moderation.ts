@@ -1,4 +1,3 @@
-import { toJson } from "@teiki/protocol/json";
 import { Cid } from "@teiki/protocol/types";
 import { assert } from "@teiki/protocol/utils";
 
@@ -8,7 +7,10 @@ import {
   PollingIndexer,
   VitalConnections,
 } from "../../framework/polling";
-import { ModerationLabels, ModerationWeights } from "../../types/moderation";
+import {
+  MODERATION_LABELS,
+  SECTION_WEIGHTS,
+} from "../../types/project/moderation";
 import { objectEntries } from "../../utils";
 
 export type AiProjectModerationContext = {
@@ -21,31 +23,25 @@ type Task<T> = { cid: Cid } & T;
 
 // TODO: Proper type
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyBufs = any;
+type RichTextContent = any;
 
 type ProjectInfo = {
   title: string;
   slogan: string;
   tags: string;
   summary: string;
-  description: AnyBufs;
-  benefits: AnyBufs;
+  description: RichTextContent;
+  benefits: RichTextContent;
   faq: string;
   media: string[]; // list of CIDs of project media
 };
 
 type ProjectAnnouncement = {
-  announcement: AnyBufs;
+  announcement: RichTextContent;
 };
 
 // Contains sections being moderated
 type Sections<T> = { [K in keyof T]: string | string[] };
-
-// Moderation result from AI
-type ModerationResult = {
-  labels: Map<string, number>;
-  error: string | null;
-};
 
 const TASKS_PER_FETCH = 20;
 
@@ -178,24 +174,25 @@ export function aiProjectModerationIndexer(
         }
       }
 
-      const { labels, error } = await callContentModeration(
-        cid,
-        { ...data, description, announcement, benefits },
-        aiServerUrl,
-        ipfsGatewayUrl
-      );
-
-      if (error == null) {
+      try {
+        const labels = await callContentModeration(
+          cid,
+          { ...data, description, announcement, benefits },
+          aiServerUrl,
+          ipfsGatewayUrl
+        );
         await sql`
           INSERT INTO ai.project_moderation ${sql({
             cid,
             error: null,
             ...Object.fromEntries(
-              ModerationLabels.map((label) => [label, labels.get(label) ?? 0])
+              MODERATION_LABELS.map((label) => [label, labels.get(label) ?? 0])
             ),
           })}
         `;
-      } else {
+        console.log(`[ai.project_moderation] OK: ${cid}`);
+      } catch (e) {
+        console.error(`[ai.project_moderation] Error ${cid}`, e);
         this.retry();
         // TODO: We will re-enable storing errors later
         // await sql`
@@ -214,71 +211,64 @@ async function callContentModeration(
   sections: Partial<Sections<ProjectInfo> & Sections<ProjectAnnouncement>>,
   aiServerUrl: string,
   ipfsGatewayUrl: string
-): Promise<ModerationResult> {
-  const labels = new Map<string, number>();
-  let error: string | null = null;
-  try {
-    for (const [key, value] of objectEntries(sections)) {
-      if (key === "media") {
-        if (!value || !Array.isArray(value)) continue;
-        for (const cid of value) {
-          const res = await fetch(`${aiServerUrl}/image-content-moderation`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/x-www-form-urlencoded",
-            },
-            body: new URLSearchParams({
-              url: `${ipfsGatewayUrl}/ipfs/${cid}`,
-            }),
-          });
-          if (res.ok) {
-            const data = await res.json();
-            assert(data != null, `Data must not be empty (${cid} | media)`);
-            for (const rlabel of data.tags) {
-              const label = rlabel.replace(" ", "_");
-              labels.set(
-                label,
-                (labels.get(label) ?? 0) + ModerationWeights[key]
-              );
-            }
-          } else {
-            error = `Response: ${res.status} - ${
-              res.statusText
-            }: ${await res.text()}`;
-          }
-        }
-      } else {
-        if (!value || Array.isArray(value)) continue;
-        const res = await fetch(`${aiServerUrl}/ai-content-moderation`, {
+): Promise<Map<string, number>> {
+  const labels = new Map();
+  for (const [key, value] of objectEntries(sections)) {
+    if (key === "media") {
+      if (!value || !Array.isArray(value)) continue;
+      for (const mediaCid of value) {
+        const tag = `${cid}/media/${mediaCid}`;
+        const res = await fetch(`${aiServerUrl}/image-content-moderation`, {
           method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({ text: value }),
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: new URLSearchParams({
+            url: `${ipfsGatewayUrl}/ipfs/${mediaCid}`,
+          }),
         });
-
-        // Duplicated with the above code, refine if needed.
         if (res.ok) {
           const data = await res.json();
-          assert(data != null, `Data must not be empty (${cid} | text)`);
+          assert(data != null, `Data must not be empty (${tag})`);
           for (const rlabel of data.tags) {
             const label = rlabel.replace(" ", "_");
-            labels.set(
-              label,
-              (labels.get(label) ?? 0) + ModerationWeights[key]
-            );
+            labels.set(label, (labels.get(label) ?? 0) + SECTION_WEIGHTS[key]);
           }
         } else {
-          error = `Response: ${res.status} - ${
-            res.statusText
-          }: ${await res.text()}`;
+          throw new Error(
+            `Response: ${tag} | ${res.status} - ${
+              res.statusText
+            }: ${await res.text()}`
+          );
         }
       }
+    } else {
+      if (!value || Array.isArray(value)) continue;
+      const tag = `${cid}/${key}`;
+      const res = await fetch(`${aiServerUrl}/ai-content-moderation`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ text: value }),
+      });
+
+      // Duplicated with the above code, refine if needed.
+      if (res.ok) {
+        const data = await res.json();
+        assert(data != null, `Data must not be empty (${tag})`);
+        for (const rlabel of data.tags) {
+          const label = rlabel.replace(" ", "_");
+          labels.set(label, (labels.get(label) ?? 0) + SECTION_WEIGHTS[key]);
+        }
+      } else {
+        throw new Error(
+          `Response: ${tag} | ${res.status} - ${
+            res.statusText
+          }: ${await res.text()}`
+        );
+      }
     }
-    console.log(`[ai.project_moderation] OK: ${cid}`);
-  } catch (e) {
-    console.error(`[ai.project_moderation] Error ${cid}`, e);
-    error = e instanceof Error ? e.message : e ? toJson(e) : "ERROR";
   }
-  return { labels, error };
+  return labels;
 }
 
 function extractFromRichText(
