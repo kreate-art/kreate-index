@@ -7,8 +7,11 @@ import { assert } from "@teiki/protocol/utils";
 import { $setup } from "../../framework/base";
 import { createPollingIndexer, PollingIndexer } from "../../framework/polling";
 import { Lovelace } from "../../types/chain";
+import {
+  DISPLAYED_SCOPE,
+  ProjectUpdateScope,
+} from "../../types/project/update";
 import { WithId } from "../../types/typelevel";
-import { DISPLAYED_SCOPE, ProjectUpdateScope } from "../../types/update";
 import { shortenNumber } from "../../utils";
 
 import { DiscordAlertContext, VitalDiscordConnections } from "./base";
