@@ -94,9 +94,9 @@ export function discordWithdrawFundsAlertIndexer(
             WHERE (dwfa.project_id, dwfa.tx_id) = (x.project_id, x.tx_id)
           )
           AND ${
-            discordIgnoredNotificationsBefore == null
-              ? sql`TRUE`
-              : sql`${discordIgnoredNotificationsBefore} <= x.time`
+            discordIgnoredNotificationsBefore
+              ? sql`${discordIgnoredNotificationsBefore} <= x.time`
+              : sql`TRUE`
           }
         ORDER BY x.id
         LIMIT ${TASKS_PER_FETCH}

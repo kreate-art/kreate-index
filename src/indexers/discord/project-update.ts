@@ -138,9 +138,9 @@ export function discordProjectUpdateAlertIndexer(
         WHERE
           x.prev_contents IS NOT NULL
           AND ${
-            discordIgnoredNotificationsBefore == null
-              ? sql`TRUE`
-              : sql`${discordIgnoredNotificationsBefore} <= x.time `
+            discordIgnoredNotificationsBefore
+              ? sql`${discordIgnoredNotificationsBefore} <= x.time `
+              : sql`TRUE`
           }
         ORDER BY
           x.id

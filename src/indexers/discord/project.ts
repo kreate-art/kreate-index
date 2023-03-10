@@ -61,14 +61,15 @@ export function discordProjectAlertIndexer(
           pd.project_id,
           pi.custom_url,
           b.time
-        FROM chain.project_detail pd
-        INNER JOIN (
+        FROM (
           SELECT
-            project_id,
-            min(id) AS id
-          FROM chain.project_detail
-          GROUP BY project_id
-        ) x ON x.project_id = pd.project_id AND x.id = pd.id
+            DISTINCT ON (project_id)
+            *
+          FROM
+            CHAIN.project_detail
+          ORDER BY
+            project_id ASC, id ASC
+        ) AS pd
         INNER JOIN
           ipfs.project_info pi ON pi.cid = pd.information_cid
         INNER JOIN
@@ -81,9 +82,9 @@ export function discordProjectAlertIndexer(
             WHERE dpa.project_id = pd.project_id
           )
           AND ${
-            discordIgnoredNotificationsBefore == null
-              ? sql`TRUE`
-              : sql`${discordIgnoredNotificationsBefore} <= b.time`
+            discordIgnoredNotificationsBefore
+              ? sql`${discordIgnoredNotificationsBefore} <= b.time`
+              : sql`TRUE`
           }
         LIMIT ${TASKS_PER_FETCH}
       `;

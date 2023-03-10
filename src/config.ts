@@ -79,11 +79,13 @@ export const ipfs = cached(() => {
 });
 
 export const discord = cached(() => {
-  const discordIgnoreNotificationsBefore =
-    process.env.DISCORD_IGNORE_NOTIFICATIONS_BEFORE;
+  const rawEnv = process.env.DISCORD_IGNORE_NOTIFICATIONS_BEFORE || undefined;
+  const discordIgnoreNotificationsBefore = rawEnv
+    ? new Date(rawEnv)
+    : undefined;
   assert(
     !discordIgnoreNotificationsBefore ||
-      !isNaN(new Date(discordIgnoreNotificationsBefore).getTime()),
+      !isNaN(discordIgnoreNotificationsBefore.getTime()),
     "Discord ignored notifications before must be ISO 8601 compliant"
   );
   return {
@@ -104,9 +106,7 @@ export const discord = cached(() => {
       "DISCORD_PROJECT_UPDATE_ALERT_CHANNEL_ID"
     ),
     DISCORD_SHINKA_ROLE_ID: requiredEnv("DISCORD_SHINKA_ROLE_ID"),
-    DISCORD_IGNORE_NOTIFICATIONS_BEFORE: discordIgnoreNotificationsBefore
-      ? new Date(discordIgnoreNotificationsBefore)
-      : undefined,
+    DISCORD_IGNORE_NOTIFICATIONS_BEFORE: discordIgnoreNotificationsBefore,
   };
 });
 
