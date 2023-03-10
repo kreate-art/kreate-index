@@ -53,7 +53,7 @@ export function discordBackingAlertIndexer(
     fetch: async function () {
       const {
         connections: { sql },
-        context: { discordIgnoredBefore },
+        context: { discordIgnoredNotificationsBefore },
       } = this;
       const tasks = await sql<Task[]>`
         SELECT
@@ -85,9 +85,9 @@ export function discordBackingAlertIndexer(
               = (ba.project_id, ba.actor_address, ba.tx_id)
           )
           AND ${
-            discordIgnoredBefore == null
+            discordIgnoredNotificationsBefore == null
               ? sql`TRUE`
-              : sql`${discordIgnoredBefore}::timestamptz <= ba.time`
+              : sql`${discordIgnoredNotificationsBefore} <= ba.time`
           }
         ORDER BY ba.id
         LIMIT ${TASKS_PER_FETCH}
