@@ -1,4 +1,4 @@
-FROM --platform=$TARGETPLATFORM node:18.14.2-bullseye-slim AS base
+FROM --platform=$TARGETPLATFORM node:18.15.0-bullseye-slim AS base
 RUN mkdir -p /app && chown -R node:node /app
 WORKDIR /app
 USER node
