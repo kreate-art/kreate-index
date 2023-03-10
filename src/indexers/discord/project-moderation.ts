@@ -1,7 +1,7 @@
 import { ActionRowBuilder, ButtonBuilder, EmbedBuilder } from "discord.js";
 import { UnixTime } from "lucid-cardano";
 
-import { Hex } from "@teiki/protocol/types";
+import { Cid, Hex } from "@teiki/protocol/types";
 import { assert } from "@teiki/protocol/utils";
 
 import { $setup } from "../../framework/base";
@@ -16,6 +16,7 @@ import { VitalDiscordConnections, DiscordAlertContext } from "./base";
 
 type ProjectId = string;
 type Task = {
+  cid: Cid;
   projectId: ProjectId;
   txId: Hex;
   projectTitle: string;
@@ -41,9 +42,9 @@ discordProjectModerationAlertIndexer.setup = $setup(async ({ sql }) => {
   await sql`
     CREATE TABLE IF NOT EXISTS discord.project_moderation_alert (
       project_id varchar(64) NOT NULL,
-      tx_id varchar(64) NOT NULL,
+      cid TEXT NOT NULL,
       completed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      PRIMARY KEY (project_id, tx_id)
+      PRIMARY KEY (project_id, cid)
     )
   `;
 });
@@ -57,58 +58,44 @@ export function discordProjectModerationAlertIndexer(
     triggers: { channels: ["discord.project_moderation_alert"] },
     concurrency: { workers: 1 },
 
-    $id: ({ projectId, txId }: Task): ProjectModerationAlertKey =>
-      `${projectId}|${txId}`,
+    $id: ({ projectId, cid }: Task): ProjectModerationAlertKey =>
+      `${projectId}|${cid}`,
 
     fetch: async function () {
       const {
         connections: { sql },
       } = this;
       const tasks = await sql<Task[]>`
-        WITH update_list AS (
-          SELECT * FROM (
-            SELECT
-              pd.id,
-              pd.project_id,
-              pd.information_cid,
-              pd.sponsorship_amount,
-              pd.sponsorship_until,
-              LAG(pd.information_cid) OVER w AS prev_information_cid
-            FROM chain.project_detail pd
-            WHERE
-              EXISTS (SELECT FROM ipfs.project_info pi WHERE pi.cid = pd.information_cid)
-            WINDOW w AS (PARTITION BY project_id ORDER BY id)
-          ) AS _a
-          WHERE
-            information_cid IS DISTINCT FROM prev_information_cid
-        )
         SELECT
-          ul.project_id,
-          o.tx_id,
-          pi.title as project_title,
           b.time,
-          pm.toxicity,
-          pm.obscene,
-          pm.identity_attack,
-          pm.insult,
-          pm.threat,
-          pm.sexual_explicit,
-          pm.political,
-          pm.discrimination,
-          pm.drug,
-          pm.gun
-        FROM update_list ul
-        INNER JOIN ipfs.project_info pi ON ul.information_cid = pi.cid
-        INNER JOIN ai.project_moderation pm ON ul.information_cid = pm.cid
-        INNER JOIN chain.output o ON ul.id = o.id
-        INNER JOIN chain.block b ON o.created_slot = b.slot
+          pi.title AS project_title,
+          x.*
+        FROM (
+          SELECT
+            DISTINCT ON (pd.project_id, pm.cid)
+            pd.id,
+            pd.project_id,
+            pd.information_cid,
+            pm.*
+          FROM
+            ai.project_moderation pm
+          INNER JOIN
+            chain.project_detail pd ON pd.information_cid = pm.cid OR pd.last_announcement_cid = pm.cid
+          ORDER BY pd.project_id ASC, pm.cid ASC, pd.id DESC
+        ) x
+        INNER JOIN
+          ipfs.project_info pi ON x.information_cid = pi.cid
+        INNER JOIN
+          chain.output o ON o.id = x.id
+        INNER JOIN
+          chain.block b ON b.slot = o.created_slot
         WHERE
           NOT EXISTS (
-            SELECT FROM discord.project_moderation_alert dpma
-            WHERE
-              (ul.project_id, o.tx_id) = (dpma.project_id, dpma.tx_id)
+            SELECT FROM discord.project_moderation_alert pma
+              WHERE (pma.project_id, pma.cid) = (x.project_id, x.cid)
           )
-        ORDER BY ul.id
+        ORDER BY
+          x.id
         LIMIT ${TASKS_PER_FETCH}
       `;
       return { tasks, continue: tasks.length >= TASKS_PER_FETCH };
@@ -170,7 +157,7 @@ export function discordProjectModerationAlertIndexer(
         await sql`
           INSERT INTO discord.project_moderation_alert ${sql({
             projectId: task.projectId,
-            txId: task.txId,
+            cid: task.cid,
           })}
             ON CONFLICT DO NOTHING
         `;

@@ -129,7 +129,7 @@ export function aiProjectModerationIndexer(
 
     handle: async function ({ id: _, cid, ...data }) {
       const {
-        connections: { sql },
+        connections: { sql, notifications },
         context: { aiServerUrl, ipfsGatewayUrl },
       } = this;
 
@@ -191,6 +191,7 @@ export function aiProjectModerationIndexer(
           })}
         `;
         console.log(`[ai.project_moderation] OK: ${cid}`);
+        notifications.notify("discord.project_moderation_alert");
       } catch (e) {
         console.error(`[ai.project_moderation] Error ${cid}`, e);
         this.retry();
