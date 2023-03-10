@@ -90,9 +90,9 @@ export function discordDelegationAlertIndexer(
             WHERE (dda.project_id, dda.tx_id) = (x.project_id, x.tx_id)
           )
           AND ${
-            discordIgnoredNotificationsBefore == null
-              ? sql`TRUE`
-              : sql`${discordIgnoredNotificationsBefore} <= x.time`
+            discordIgnoredNotificationsBefore
+              ? sql`${discordIgnoredNotificationsBefore} <= x.time`
+              : sql`TRUE`
           }
         ORDER BY x.id
         LIMIT ${TASKS_PER_FETCH}

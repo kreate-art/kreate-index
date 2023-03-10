@@ -85,9 +85,9 @@ export function discordBackingAlertIndexer(
               = (ba.project_id, ba.actor_address, ba.tx_id)
           )
           AND ${
-            discordIgnoredNotificationsBefore == null
-              ? sql`TRUE`
-              : sql`${discordIgnoredNotificationsBefore} <= ba.time`
+            discordIgnoredNotificationsBefore
+              ? sql`${discordIgnoredNotificationsBefore} <= ba.time`
+              : sql`TRUE`
           }
         ORDER BY ba.id
         LIMIT ${TASKS_PER_FETCH}
