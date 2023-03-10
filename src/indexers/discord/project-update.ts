@@ -63,7 +63,7 @@ export function discordProjectUpdateAlertIndexer(
     fetch: async function () {
       const {
         connections: { sql },
-        context: { discordIgnoredBefore },
+        context: { discordIgnoredNotificationsBefore },
       } = this;
       const tasks = await sql<Task[]>`
         WITH update_list AS (
@@ -138,9 +138,9 @@ export function discordProjectUpdateAlertIndexer(
         WHERE
           x.prev_contents IS NOT NULL
           AND ${
-            discordIgnoredBefore == null
+            discordIgnoredNotificationsBefore == null
               ? sql`TRUE`
-              : sql`${discordIgnoredBefore}::timestamptz <= x.time `
+              : sql`${discordIgnoredNotificationsBefore} <= x.time `
           }
         ORDER BY
           x.id

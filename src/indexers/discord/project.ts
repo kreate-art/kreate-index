@@ -54,7 +54,7 @@ export function discordProjectAlertIndexer(
     fetch: async function () {
       const {
         connections: { sql },
-        context: { discordIgnoredBefore },
+        context: { discordIgnoredNotificationsBefore },
       } = this;
       const tasks = await sql<Task[]>`
         SELECT
@@ -81,9 +81,9 @@ export function discordProjectAlertIndexer(
             WHERE dpa.project_id = pd.project_id
           )
           AND ${
-            discordIgnoredBefore == null
+            discordIgnoredNotificationsBefore == null
               ? sql`TRUE`
-              : sql`${discordIgnoredBefore}::timestamptz <= b.time`
+              : sql`${discordIgnoredNotificationsBefore} <= b.time`
           }
         LIMIT ${TASKS_PER_FETCH}
       `;
