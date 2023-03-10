@@ -13,6 +13,7 @@ import { discordBackingAlertIndexer } from "./indexers/discord/backing";
 import { createDiscordAlertContext } from "./indexers/discord/base";
 import { discordDelegationAlertIndexer } from "./indexers/discord/delegation";
 import { discordProjectAlertIndexer } from "./indexers/discord/project";
+import { discordProjectModerationAlertIndexer } from "./indexers/discord/project-moderation";
 import { discordProjectUpdateAlertIndexer } from "./indexers/discord/project-update";
 import { discordWithdrawFundsAlertIndexer } from "./indexers/discord/withdraw-funds";
 import {
@@ -213,6 +214,14 @@ const AllIndexers = {
     () =>
       createDiscordAlertContext(
         config.discord().DISCORD_PROJECT_UPDATE_ALERT_CHANNEL_ID
+      )
+  ),
+  "discord.project_moderation_alert": wrapPollingIndexer(
+    discordProjectModerationAlertIndexer,
+    ["sql", "discord", "notifications"],
+    () =>
+      createDiscordAlertContext(
+        config.discord().DISCORD_CONTENT_MODERATION_CHANNEL_ID
       )
   ),
 } as const;
