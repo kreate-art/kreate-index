@@ -223,7 +223,6 @@ const DisabledIndexers: Partial<Record<config.Env, string[]>> = {
   development: AllIndexerKeys.filter(
     (k) => k.startsWith("ai.") || k.startsWith("discord.")
   ),
-  testnet: AllIndexerKeys.filter((k) => k.startsWith("discord.")),
 };
 const disabled = DisabledIndexers[config.ENV] ?? [];
 
