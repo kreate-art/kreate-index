@@ -116,6 +116,7 @@ export function aiProjectModerationIndexer(
           LEFT JOIN ai.project_moderation pm ON pa.cid = pm.cid
         WHERE
           pm.cid IS NULL
+          AND NOT pa.is_exclusive
         LIMIT ${TASKS_PER_FETCH}
       `;
 
