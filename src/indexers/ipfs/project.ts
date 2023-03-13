@@ -57,7 +57,8 @@ ipfsProjectAnnouncementIndexer.setup = $setup(async ({ sql }) => {
   await sql`
     CREATE TABLE IF NOT EXISTS ipfs.project_announcement (
       cid text PRIMARY KEY,
-      data jsonb NOT NULL
+      data jsonb NOT NULL,
+      is_exclusive boolean NOT NULL
     )
   `;
 });
@@ -199,7 +200,11 @@ export function ipfsProjectAnnouncementIndexer(
       } = this;
       try {
         const data = fromJson(await fetchFromIpfs(ipfs, cid));
-        const record = { cid, data };
+        const isExclusive =
+          data &&
+          typeof data === "object" &&
+          (data as Record<string, unknown>).exclusive;
+        const record = { cid, data, isExclusive };
         // TODO: Error handling?
         await sql`
           INSERT INTO ipfs.project_announcement ${sql(record)}
