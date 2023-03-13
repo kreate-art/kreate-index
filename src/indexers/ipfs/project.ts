@@ -200,10 +200,11 @@ export function ipfsProjectAnnouncementIndexer(
       } = this;
       try {
         const data = fromJson(await fetchFromIpfs(ipfs, cid));
-        const isExclusive =
+        const isExclusive = !!(
           data &&
           typeof data === "object" &&
-          (data as Record<string, unknown>).exclusive;
+          (data as Record<string, unknown>).exclusive
+        );
         const record = { cid, data, isExclusive };
         // TODO: Error handling?
         await sql`
