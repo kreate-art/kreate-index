@@ -13,6 +13,7 @@ import { discordBackingAlertIndexer } from "./indexers/discord/backing";
 import { createDiscordAlertContext } from "./indexers/discord/base";
 import { discordDelegationAlertIndexer } from "./indexers/discord/delegation";
 import { discordProjectAlertIndexer } from "./indexers/discord/project";
+import { discordProjectAnnouncementAlertIndexer } from "./indexers/discord/project-announcement";
 import { discordProjectModerationAlertIndexer } from "./indexers/discord/project-moderation";
 import { discordProjectUpdateAlertIndexer } from "./indexers/discord/project-update";
 import { discordWithdrawFundsAlertIndexer } from "./indexers/discord/withdraw-funds";
@@ -216,6 +217,14 @@ const AllIndexers = {
         config.discord().DISCORD_PROJECT_UPDATE_ALERT_CHANNEL_ID
       )
   ),
+  "discord.project_announcement_alert": wrapPollingIndexer(
+    discordProjectAnnouncementAlertIndexer,
+    ["sql", "discord", "notifications"],
+    () =>
+      createDiscordAlertContext(
+        config.discord().DISCORD_PROJECT_ANNOUCEMENT_ALERT_CHANNEL_ID
+      )
+  ),
   "discord.project_moderation_alert": wrapPollingIndexer(
     discordProjectModerationAlertIndexer,
     ["sql", "discord", "notifications"],
@@ -230,7 +239,8 @@ const AllIndexerKeys = objectKeys(AllIndexers);
 
 const DisabledIndexers: Partial<Record<config.Env, string[]>> = {
   development: AllIndexerKeys.filter(
-    (k) => k.startsWith("ai.") || k.startsWith("discord.")
+    (k) => k.startsWith("ai.")
+    //  || k.startsWith("discord.")
   ),
 };
 const disabled = DisabledIndexers[config.ENV] ?? [];

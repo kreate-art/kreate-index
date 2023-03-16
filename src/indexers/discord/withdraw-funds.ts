@@ -4,6 +4,7 @@ import { Lovelace, UnixTime } from "lucid-cardano";
 import { Hex } from "@kreate/protocol/types";
 import { assert } from "@kreate/protocol/utils";
 
+import { TASKS_PER_FETCH } from "../../constants";
 import { $setup } from "../../framework/base";
 import { createPollingIndexer, PollingIndexer } from "../../framework/polling";
 import { shortenNumber } from "../../utils";
@@ -20,8 +21,6 @@ type Task = {
   time: UnixTime;
 };
 type WithdrawFundsAlertKey = string; // projectId|txId
-
-const TASKS_PER_FETCH = 20;
 
 discordWithdrawFundsAlertIndexer.setup = $setup(async ({ sql }) => {
   await sql`

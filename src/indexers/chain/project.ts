@@ -250,7 +250,10 @@ export const projectDetailEvent = $.event<"project_detail">(
     }
     await sql`INSERT INTO chain.project_detail ${sql(projectDetails)}`;
     driver.notify("ipfs.project_info");
-    hasAnnouncement && driver.notify("ipfs.project_announcement");
+    if (hasAnnouncement) {
+      driver.notify("ipfs.project_announcement");
+      driver.notify("discord.project_announcement_alert");
+    }
     driver.notify("discord.project_update_alert");
     driver.refresh("views.project_summary");
   }

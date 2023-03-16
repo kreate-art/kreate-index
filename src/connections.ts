@@ -175,6 +175,8 @@ register("notifications", {
         "discord.withdraw_funds_alert": DISCORD_NOTIFICATION_OPTIONS_ENTRY,
         "discord.delegation_alert": DISCORD_NOTIFICATION_OPTIONS_ENTRY,
         "discord.project_update_alert": DISCORD_NOTIFICATION_OPTIONS_ENTRY,
+        "discord.project_announcement_alert":
+          DISCORD_NOTIFICATION_OPTIONS_ENTRY,
       },
     }),
   disconnect: (self) => self.shutdown(),

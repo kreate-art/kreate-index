@@ -4,6 +4,7 @@ import { UnixTime } from "lucid-cardano";
 import { Cid, Hex } from "@kreate/protocol/types";
 import { assert } from "@kreate/protocol/utils";
 
+import { TASKS_PER_FETCH } from "../../constants";
 import { $setup } from "../../framework/base";
 import { createPollingIndexer, PollingIndexer } from "../../framework/polling";
 import {
@@ -35,8 +36,6 @@ type Task = {
   pornographic: number;
 };
 type ProjectModerationAlertKey = string; // projectId|txId
-
-const TASKS_PER_FETCH = 20;
 
 discordProjectModerationAlertIndexer.setup = $setup(async ({ sql }) => {
   await sql`

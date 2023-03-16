@@ -9,6 +9,7 @@ import {
 
 import { assert } from "@kreate/protocol/utils";
 
+import { TASKS_PER_FETCH } from "../../constants";
 import { $setup } from "../../framework/base";
 import { createPollingIndexer, PollingIndexer } from "../../framework/polling";
 
@@ -16,8 +17,6 @@ import { VitalDiscordConnections, DiscordAlertContext } from "./base";
 
 type ProjectId = string;
 type Task = { projectId: ProjectId; customUrl: string | null };
-
-const TASKS_PER_FETCH = 20;
 
 discordProjectAlertIndexer.setup = $setup(async ({ sql }) => {
   await sql`

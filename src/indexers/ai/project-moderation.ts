@@ -1,6 +1,7 @@
 import { Cid } from "@kreate/protocol/types";
 import { assert } from "@kreate/protocol/utils";
 
+import { TASKS_PER_FETCH } from "../../constants";
 import { $setup } from "../../framework/base";
 import {
   createPollingIndexer,
@@ -42,8 +43,6 @@ type ProjectAnnouncement = {
 
 // Contains sections being moderated
 type Sections<T> = { [K in keyof T]: string | string[] };
-
-const TASKS_PER_FETCH = 20;
 
 aiProjectModerationIndexer.setup = $setup(async ({ sql }) => {
   await sql`

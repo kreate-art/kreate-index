@@ -4,6 +4,7 @@ import { PoolId, UnixTime } from "lucid-cardano";
 import { Hex } from "@kreate/protocol/types";
 import { assert } from "@kreate/protocol/utils";
 
+import { TASKS_PER_FETCH } from "../../constants";
 import { $setup } from "../../framework/base";
 import { createPollingIndexer, PollingIndexer } from "../../framework/polling";
 
@@ -18,8 +19,6 @@ type Task = {
   time: UnixTime;
 };
 type DelegationAlertKey = string; // projectId|txId
-
-const TASKS_PER_FETCH = 20;
 
 discordDelegationAlertIndexer.setup = $setup(async ({ sql }) => {
   await sql`
