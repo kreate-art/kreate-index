@@ -1,6 +1,6 @@
-import { fromJson } from "@teiki/protocol/json";
-import { Cid } from "@teiki/protocol/types";
-import { nullIfFalsy } from "@teiki/protocol/utils";
+import { fromJson } from "@kreate/protocol/json";
+import { Cid } from "@kreate/protocol/types";
+import { nullIfFalsy } from "@kreate/protocol/utils";
 
 import { AllConnections, Connections } from "../../connections";
 import { $setup } from "../../framework/base";
@@ -102,7 +102,7 @@ export function ipfsProjectInfoIndexer(
       let projectInfo: any;
       // TODO: Error handling?
       try {
-        // NOTE: This function is copied from teiki-backend/src/indexer/project-info.ts
+        // NOTE: This function is copied from kreate-backend/src/indexer/project-info.ts
         projectInfo = fromJson(await fetchFromIpfs(ipfs, cid));
       } catch (error) {
         // TODO: Better log here

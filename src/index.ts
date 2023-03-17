@@ -54,7 +54,7 @@ prexit(async (signal, error, idk) => {
 });
 
 // Indexers
-const teikiChainIndexer: Indexer = {
+const kreateChainIndexer: Indexer = {
   // TODO: Fix those abstraction leak later...
   setup: getChainIndexer.setup,
   run: async () => {
@@ -127,7 +127,7 @@ function wrapPollingIndexer<Context, Keys extends connections.ConnectionKey[]>(
 }
 
 const AllIndexers = {
-  chain: teikiChainIndexer,
+  chain: kreateChainIndexer,
   "ipfs.project_info": wrapPollingIndexer(
     ipfsProjectInfoIndexer,
     ["sql", "ipfs", "notifications", "views"],

@@ -1,7 +1,7 @@
 // TODO: Move SQL definitions here, to share between projects
 import postgres from "postgres";
 
-import { toJson, fromJson } from "@teiki/protocol/json";
+import { toJson, fromJson } from "@kreate/protocol/json";
 
 export { postgres };
 
@@ -9,7 +9,7 @@ export type SqlTypes = Record<string, postgres.PostgresType>;
 
 const POSTGRES_BASE_OPTIONS: postgres.Options<never> = {
   connection: {
-    application_name: "teiki/index",
+    application_name: "kreate/index",
   },
   // eslint-disable-next-line import/no-named-as-default-member
   transform: postgres.camel,

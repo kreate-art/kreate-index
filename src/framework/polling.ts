@@ -1,6 +1,6 @@
 import fastq from "fastq";
 
-import { TimeDifference, UnixTime } from "@teiki/protocol/types";
+import { TimeDifference, UnixTime } from "@kreate/protocol/types";
 
 import { Connections } from "../connections";
 import { MaybePromise, NonEmpty, WithId } from "../types/typelevel";

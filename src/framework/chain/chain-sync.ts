@@ -7,7 +7,7 @@ import {
 import * as O from "@cardano-ogmios/schema";
 import fastq from "fastq";
 
-import JsonBig from "@teiki/protocol/json";
+import JsonBig from "@kreate/protocol/json";
 
 import { OgmiosContext } from "../../ogmios";
 import { ErrorHandler, queueCatch } from "../base";

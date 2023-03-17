@@ -1,5 +1,5 @@
-import { Cid } from "@teiki/protocol/types";
-import { assert } from "@teiki/protocol/utils";
+import { Cid } from "@kreate/protocol/types";
+import { assert } from "@kreate/protocol/utils";
 
 import { $setup } from "../../framework/base";
 import {

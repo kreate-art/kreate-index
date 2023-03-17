@@ -1,18 +1,18 @@
-import { getAddressDetailsSafe } from "@teiki/protocol/helpers/lucid";
-import * as S from "@teiki/protocol/schema";
-import { ProtocolParamsDatum } from "@teiki/protocol/schema/teiki/protocol";
+import { getAddressDetailsSafe } from "@kreate/protocol/helpers/lucid";
+import * as S from "@kreate/protocol/schema";
+import { ProtocolParamsDatum } from "@kreate/protocol/schema/teiki/protocol";
 import {
   DedicatedTreasuryDatum,
   OpenTreasuryDatum,
   SharedTreasuryDatum,
-} from "@teiki/protocol/schema/teiki/treasury";
-import { Hex } from "@teiki/protocol/types";
+} from "@kreate/protocol/schema/teiki/treasury";
+import { Hex } from "@kreate/protocol/types";
 
 import { $handlers } from "../../framework/chain";
 import { prettyOutRef } from "../../framework/chain/conversions";
 import { NonEmpty } from "../../types/typelevel";
 
-import { TeikiChainIndexContext } from "./context";
+import { KreateChainIndexContext } from "./context";
 
 export type ChainDedicatedTreasury = { projectId: Hex };
 
@@ -23,7 +23,7 @@ export type Event =
   | { type: "shared_treasury"; indicies: NonEmpty<number[]> }
   | { type: "open_treasury"; indicies: NonEmpty<number[]> };
 
-const $ = $handlers<TeikiChainIndexContext, Event>();
+const $ = $handlers<KreateChainIndexContext, Event>();
 
 export const setup = $.setup(async ({ sql }) => {
   await sql`

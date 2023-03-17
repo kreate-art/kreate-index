@@ -1,8 +1,8 @@
-// SHARED: This module should be shared with `teiki`.
+// SHARED: This module should be shared with `kreate-web`.
 import * as O from "@cardano-ogmios/schema";
 import * as L from "lucid-cardano";
 
-import { Hex, UnixTime } from "@teiki/protocol/types";
+import { Hex, UnixTime } from "@kreate/protocol/types";
 
 export type Lovelace = bigint;
 

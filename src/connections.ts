@@ -4,7 +4,7 @@ import { GatewayIntentBits } from "discord.js";
 import * as IpfsClient from "ipfs-http-client";
 import { Lucid, Network as LucidNetwork } from "lucid-cardano";
 
-import { assert } from "@teiki/protocol/utils";
+import { assert } from "@kreate/protocol/utils";
 
 import * as config from "./config";
 import * as db from "./db";

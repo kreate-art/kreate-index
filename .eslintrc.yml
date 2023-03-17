@@ -41,9 +41,9 @@ rules:
         - type
         - unknown
       pathGroups:
-        - pattern: "@teiki/**"
+        - pattern: "@kreate/**"
           group: internal
-      "pathGroupsExcludedImportTypes": ["@teiki/**"]
+      "pathGroupsExcludedImportTypes": ["@kreate/**"]
       newlines-between: always
       alphabetize:
         order: asc

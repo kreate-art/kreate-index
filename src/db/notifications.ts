@@ -1,6 +1,6 @@
 import { debounce } from "throttle-debounce";
 
-import { assert } from "@teiki/protocol/utils";
+import { assert } from "@kreate/protocol/utils";
 
 import { Sql } from ".";
 

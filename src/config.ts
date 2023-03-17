@@ -5,7 +5,7 @@ import * as O from "@cardano-ogmios/schema";
 import dotenv from "dotenv";
 import YAML from "yaml";
 
-import { assert } from "@teiki/protocol/utils";
+import { assert } from "@kreate/protocol/utils";
 
 import { loadConfig } from "./indexers/chain/context";
 import { cached } from "./utils";
@@ -33,9 +33,9 @@ export function pick<T extends Record<string, unknown>, K extends keyof T>(
   return Object.fromEntries(entries);
 }
 
-export const teiki = cached(() => {
+export const kreate = cached(() => {
   return {
-    TEIKI_HOST: requiredEnv("TEIKI_HOST"),
+    KREATE_ORIGIN: requiredEnv("KREATE_ORIGIN"),
   };
 });
 

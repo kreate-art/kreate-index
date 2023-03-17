@@ -1,6 +1,6 @@
 import { TransactionSql } from "postgres";
 
-import { Hex } from "@teiki/protocol/types";
+import { Hex } from "@kreate/protocol/types";
 
 import { Sql, SqlQuery } from "../../db";
 import { $setup } from "../../framework/base";
