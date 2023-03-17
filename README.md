@@ -1,6 +1,6 @@
-# teiki-index
+# Kreate Index
 
-This repository contains the Teiki index implementation in Generation I.
+This repository contains the Kreate Index implementation in Gen I.
 
 ## Docker
 
@@ -14,7 +14,7 @@ docker buildx build \
 
 ### Run
 
-Teiki Index depends on a few other services:
+Kreate Index depends on a few other services:
 
 - cardano-node (https://github.com/input-output-hk/cardano-node)
 - ogmios (https://github.com/CardanoSolutions/ogmios)
@@ -42,7 +42,3 @@ You need to configure your own `.env` file. An example of the running protocol o
 npm ci
 npm run start all
 ```
-
----
-
-Feel free to connect: [Website](https://teiki.network), [Medium](https://teikinetwork.medium.com), [Discord](https://discord.gg/n9wZZTY6XA), [Twitter](https://twitter.com/TeikiNetwork), [Telegram](https://t.me/teiki_announcement). We are very open to discussions, questions, and feedback :seedling:.
