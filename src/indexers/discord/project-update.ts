@@ -1,8 +1,8 @@
 import { ActionRowBuilder, ButtonBuilder, EmbedBuilder } from "discord.js";
 import { UnixTime } from "lucid-cardano";
 
-import { Hex } from "@teiki/protocol/types";
-import { assert } from "@teiki/protocol/utils";
+import { Hex } from "@kreate/protocol/types";
+import { assert } from "@kreate/protocol/utils";
 
 import { $setup } from "../../framework/base";
 import { createPollingIndexer, PollingIndexer } from "../../framework/polling";
@@ -155,7 +155,7 @@ export function discordProjectUpdateAlertIndexer(
     handle: async function (task: WithId<Task, ProjectUpdateAlertKey>) {
       const {
         connections: { sql, discord },
-        context: { channelId, cexplorerUrl, teikiHost },
+        context: { channelId, cexplorerUrl, kreateOrigin },
       } = this;
       try {
         // Limited at 256 characters
@@ -186,7 +186,7 @@ export function discordProjectUpdateAlertIndexer(
             new ButtonBuilder()
               .setStyle(5)
               .setLabel("View project")
-              .setURL(`${teikiHost}/projects-by-id/${task.projectId}`)
+              .setURL(`${kreateOrigin}/kreator-by-id/${task.projectId}`)
           )
           .addComponents(
             new ButtonBuilder()

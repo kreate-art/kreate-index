@@ -7,7 +7,7 @@ import {
   Interaction,
 } from "discord.js";
 
-import { assert } from "@teiki/protocol/utils";
+import { assert } from "@kreate/protocol/utils";
 
 import { $setup } from "../../framework/base";
 import { createPollingIndexer, PollingIndexer } from "../../framework/polling";
@@ -94,10 +94,10 @@ export function discordProjectAlertIndexer(
     handle: async function ({ projectId, customUrl }) {
       const {
         connections: { sql, discord },
-        context: { channelId, shinkaRoleId, teikiHost },
+        context: { channelId, shinkaRoleId, kreateOrigin },
       } = this;
       try {
-        // NOTE: This function is copied from teiki-backend/src/indexer/project-info.ts
+        // NOTE: This function is copied from kreate-backend/src/indexer/project-info.ts
         // TODO: Proper type
         const buttons = new ActionRowBuilder()
           .addComponents(
@@ -117,8 +117,8 @@ export function discordProjectAlertIndexer(
         assert(channel, `Channel ${channelId} not found`);
         assert("send" in channel, `Channel ${channelId} is not sendable`);
         const projectUrl = customUrl
-          ? `${teikiHost}/projects/${customUrl}`
-          : `${teikiHost}/projects-by-id/${projectId}`;
+          ? `${kreateOrigin}/k/${customUrl}`
+          : `${kreateOrigin}/kreator-by-id/${projectId}`;
         channel.send({
           content: `New project: ${projectUrl}\n<@&${shinkaRoleId}>`,
           // eslint-disable-next-line @typescript-eslint/no-explicit-any

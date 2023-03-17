@@ -1,21 +1,21 @@
 import { Address, ScriptHash } from "lucid-cardano";
 
-import { deconstructAddress } from "@teiki/protocol/helpers/schema";
-import * as S from "@teiki/protocol/schema";
+import { deconstructAddress } from "@kreate/protocol/helpers/schema";
+import * as S from "@kreate/protocol/schema";
 import {
   ProjectDatum,
   ProjectDetailDatum,
   ProjectScriptDatum,
   ProjectStatus,
-} from "@teiki/protocol/schema/teiki/project";
-import { Cid, Hex, UnixTime } from "@teiki/protocol/types";
+} from "@kreate/protocol/schema/teiki/project";
+import { Cid, Hex, UnixTime } from "@kreate/protocol/types";
 
 import { $handlers } from "../../framework/chain";
 import { prettyOutRef } from "../../framework/chain/conversions";
 import { Lovelace } from "../../types/chain";
 import { NonEmpty } from "../../types/typelevel";
 
-import { TeikiChainIndexContext } from "./context";
+import { KreateChainIndexContext } from "./context";
 
 const ProjectStatusMapping = {
   Active: "active",
@@ -57,7 +57,7 @@ export type Event =
   | { type: "project_detail"; indicies: NonEmpty<number[]> }
   | { type: "project_script"; indicies: NonEmpty<number[]> }
   | { type: "project_script$ceased" };
-const $ = $handlers<TeikiChainIndexContext, Event>();
+const $ = $handlers<KreateChainIndexContext, Event>();
 
 export const setup = $.setup(async ({ sql }) => {
   await sql`

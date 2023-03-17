@@ -1,16 +1,16 @@
 {
-  "name": "@teiki/index",
+  "name": "@kreate/index",
   "version": "0.1.0",
   "keywords": [
     "Crowdfunding"
   ],
-  "homepage": "https://github.com/teiki-network/teiki-index#readme",
+  "homepage": "https://github.com/kreate-community/kreate-index#readme",
   "bugs": {
-    "url": "https://github.com/teiki-network/teiki-index/issues"
+    "url": "https://github.com/kreate-community/kreate-index/issues"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/teiki-network/teiki-index.git"
+    "url": "https://github.com/kreate-community/kreate-index.git"
   },
   "type": "module",
   "scripts": {
@@ -25,7 +25,7 @@
     "@aws-sdk/client-s3": "^3.292.0",
     "@aws-sdk/lib-storage": "^3.292.0",
     "@cardano-ogmios/client": "^5.6.0",
-    "@teiki/protocol": "github:teiki-network/teiki-protocol#40d812df463ffa8a4c5d950265dd04ed227f9ace",
+    "@kreate/protocol": "github:kreate-community/kreate-protocol#100961d7ebb612dd9c8b0c070aafbea33e0eae21",
     "discord.js": "14.8.0",
     "dotenv": "^16.0.3",
     "fastq": "^1.15.0",

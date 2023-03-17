@@ -1,6 +1,6 @@
 import * as O from "@cardano-ogmios/schema";
 
-import { UnixTime } from "@teiki/protocol/types";
+import { UnixTime } from "@kreate/protocol/types";
 
 import { BLOCK_INGESTION_CONFIG } from "../../config";
 import { ChainBlock } from "../../types/chain";

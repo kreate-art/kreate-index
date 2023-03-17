@@ -1,11 +1,11 @@
 import * as O from "@cardano-ogmios/schema";
 import { Address, TxHash } from "lucid-cardano";
 
-import { deconstructAddress } from "@teiki/protocol/helpers/schema";
-import * as S from "@teiki/protocol/schema";
-import { BackingDatum } from "@teiki/protocol/schema/teiki/backing";
-import { Hex, UnixTime } from "@teiki/protocol/types";
-import { assert } from "@teiki/protocol/utils";
+import { deconstructAddress } from "@kreate/protocol/helpers/schema";
+import * as S from "@kreate/protocol/schema";
+import { BackingDatum } from "@kreate/protocol/schema/teiki/backing";
+import { Hex, UnixTime } from "@kreate/protocol/types";
+import { assert } from "@kreate/protocol/utils";
 
 import { $handlers } from "../../framework/chain";
 import { prettyOutRef } from "../../framework/chain/conversions";
@@ -13,7 +13,7 @@ import { BackingActionType, BackingActionTypes } from "../../types/backing";
 import { Lovelace } from "../../types/chain";
 import { NonEmpty } from "../../types/typelevel";
 
-import { TeikiChainIndexContext } from "./context";
+import { KreateChainIndexContext } from "./context";
 
 export type ChainBacking = {
   projectId: Hex;
@@ -38,7 +38,7 @@ export type ChainBackingAction = {
 };
 
 export type Event = { type: "backing"; indicies: NonEmpty<number[]> | null };
-const $ = $handlers<TeikiChainIndexContext, Event>();
+const $ = $handlers<KreateChainIndexContext, Event>();
 
 export const setup = $.setup(async ({ sql }) => {
   // TODO: Rename staked_at => backed_at in contracts

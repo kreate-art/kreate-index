@@ -1,7 +1,7 @@
 import * as O from "@cardano-ogmios/schema";
 import * as L from "lucid-cardano";
 
-import { Hex } from "@teiki/protocol/types";
+import { Hex } from "@kreate/protocol/types";
 
 import { ChainOutput } from "../../types/chain";
 

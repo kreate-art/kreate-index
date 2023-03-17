@@ -1,6 +1,6 @@
 import * as S3 from "@aws-sdk/client-s3";
 
-import { assert } from "@teiki/protocol/utils";
+import { assert } from "@kreate/protocol/utils";
 
 import { AllConnections, Connections } from "../../connections";
 import { $setup } from "../../framework/base";

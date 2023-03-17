@@ -25,7 +25,7 @@ export function cached<T>(fn: () => T): () => T {
 }
 
 /**
- * This function is brought from teiki-web
+ * This function is brought from kreate-web
  *
  * Shorten integers.
  *

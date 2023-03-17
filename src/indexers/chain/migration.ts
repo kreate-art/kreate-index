@@ -2,10 +2,10 @@ import { fromText } from "lucid-cardano";
 
 import { $handlers } from "../../framework/chain";
 
-import { TeikiChainIndexContext } from "./context";
+import { KreateChainIndexContext } from "./context";
 
 export type Event = { type: "migration" };
-const $ = $handlers<TeikiChainIndexContext, Event>();
+const $ = $handlers<KreateChainIndexContext, Event>();
 
 const MIGRATION_ASSET_SUFFIX = "." + fromText("migration");
 

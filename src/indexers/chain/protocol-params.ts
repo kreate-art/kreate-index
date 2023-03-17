@@ -1,13 +1,13 @@
-import * as S from "@teiki/protocol/schema";
-import { ProtocolParamsDatum } from "@teiki/protocol/schema/teiki/protocol";
+import * as S from "@kreate/protocol/schema";
+import { ProtocolParamsDatum } from "@kreate/protocol/schema/teiki/protocol";
 
 import { $handlers } from "../../framework/chain";
 import { prettyOutRef } from "../../framework/chain/conversions";
 
-import { TeikiChainIndexContext } from "./context";
+import { KreateChainIndexContext } from "./context";
 
 export type Event = { type: "protocol_params"; index: number };
-const $ = $handlers<TeikiChainIndexContext, Event>();
+const $ = $handlers<KreateChainIndexContext, Event>();
 
 export const setup = $.setup(async ({ sql }) => {
   await sql`

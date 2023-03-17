@@ -1,5 +1,5 @@
 version: "3"
-# TODO: Currently this file only includes a setup for Teiki Testnet (preview)
+# TODO: Currently this file only includes a setup for Kreate Testnet (preview)
 services:
   ogmios-with-node:
     image: cardanosolutions/cardano-node-ogmios:v5.5.8_1.35.4-preview
@@ -28,8 +28,8 @@ services:
   postgres:
     image: postgres:15.1-alpine3.17
     environment:
-      POSTGRES_PASSWORD: teiki73114
-      POSTGRES_DB: teiki
+      POSTGRES_PASSWORD: kreate
+      POSTGRES_DB: kreate
     volumes:
       - postgres-data:/var/lib/postgresql/data
     ports:
@@ -37,7 +37,7 @@ services:
     restart: on-failure
 
   index:
-    image: teiki/index:latest
+    image: kreate/index:latest
     build:
       context: .
       args:
@@ -49,7 +49,7 @@ services:
     env_file:
       - .env.testnet
     environment:
-      DATABASE_URL: postgres://postgres:teiki73114@postgres:5432/teiki
+      DATABASE_URL: postgres://postgres:kreate@postgres:5432/kreate
       OGMIOS_HOST: ogmios-with-node
       OGMIOS_PORT: 1337
       IPFS_SERVER_URL: http://ipfs:5001

@@ -1,6 +1,6 @@
 import * as O from "@cardano-ogmios/schema";
 
-import { UnixTime } from "@teiki/protocol/types";
+import { UnixTime } from "@kreate/protocol/types";
 
 import { slotFrom } from "./conversions";
 

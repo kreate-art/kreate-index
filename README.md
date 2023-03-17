@@ -9,7 +9,7 @@ This repository contains the Kreate Index implementation in Gen I.
 ```sh
 docker buildx build \
   --build-arg "COMMIT_SHA=$(git rev-parse HEAD)" \
-  -t teiki/index:latest .
+  -t kreate/index:latest .
 ```
 
 ### Run
@@ -24,9 +24,9 @@ Kreate Index depends on a few other services:
 A minimal working setup to get those services up and running is defined in `docker-compose.yml`.
 
 ```sh
-# Start (teiki-index and required services)
+# Start (kreate-index and required services)
 COMMIT_SHA=$(git rev-parse HEAD) docker-compose up -d --build --remove-orphans
-# Check teiki-index logs
+# Check kreate-index logs
 docker-compose logs -t -f index
 # Stop
 docker-compose down
@@ -34,7 +34,7 @@ docker-compose down
 
 ## Development
 
-You need to configure your own `.env` file. An example of the running protocol on testnet (https://testnet.teiki.network) can be found in `.env.testnet`.
+You need to configure your own `.env` file. An example of the running protocol on testnet (https://testnet.kreate.community) can be found in `.env.testnet`.
 
 ### Start
 

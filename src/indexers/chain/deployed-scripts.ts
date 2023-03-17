@@ -1,11 +1,11 @@
-import { getAddressDetailsSafe } from "@teiki/protocol/helpers/lucid";
+import { getAddressDetailsSafe } from "@kreate/protocol/helpers/lucid";
 
 import { $handlers } from "../../framework/chain";
 
-import { TeikiChainIndexContext } from "./context";
+import { KreateChainIndexContext } from "./context";
 
 export type Event = { type: "deployed_scripts"; indicies: number[] };
-const $ = $handlers<TeikiChainIndexContext, Event>();
+const $ = $handlers<KreateChainIndexContext, Event>();
 
 export const filter = $.filter(
   ({

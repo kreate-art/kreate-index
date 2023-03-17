@@ -1,8 +1,8 @@
 import { ActionRowBuilder, ButtonBuilder, EmbedBuilder } from "discord.js";
 import { Lovelace, UnixTime } from "lucid-cardano";
 
-import { Hex } from "@teiki/protocol/types";
-import { assert } from "@teiki/protocol/utils";
+import { Hex } from "@kreate/protocol/types";
+import { assert } from "@kreate/protocol/utils";
 
 import { $setup } from "../../framework/base";
 import { createPollingIndexer, PollingIndexer } from "../../framework/polling";
@@ -115,7 +115,7 @@ export function discordWithdrawFundsAlertIndexer(
     }) {
       const {
         connections: { sql, discord },
-        context: { channelId, cexplorerUrl, teikiHost },
+        context: { channelId, cexplorerUrl, kreateOrigin },
       } = this;
       try {
         // Limited at 256 characters
@@ -143,7 +143,7 @@ export function discordWithdrawFundsAlertIndexer(
             new ButtonBuilder()
               .setStyle(5)
               .setLabel("View project")
-              .setURL(`${teikiHost}/projects-by-id/${projectId}`)
+              .setURL(`${kreateOrigin}/kreator-by-id/${projectId}`)
           )
           .addComponents(
             new ButtonBuilder()

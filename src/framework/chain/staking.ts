@@ -21,7 +21,7 @@ import { slotFrom } from "./conversions";
 import { $handlers } from ".";
 
 // TODO: This will break if a StakeKey and a StakeScript shares the same blake2b-224
-// However it is fine since we never use StakeKey in Teiki anyways.
+// However it is fine since we never use StakeKey in Kreate anyways.
 
 const DEFAULT_DEBOUNCE = 250; // 0.25s
 const DEFAULT_INTERVAL = 300_000; // 5 minute

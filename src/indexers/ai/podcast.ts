@@ -5,9 +5,9 @@ import { Upload } from "@aws-sdk/lib-storage";
 import { checkExceptions } from "@aws-sdk/util-waiter";
 import fetch from "node-fetch";
 
-import { toJson } from "@teiki/protocol/json";
-import { Cid } from "@teiki/protocol/types";
-import { assert } from "@teiki/protocol/utils";
+import { toJson } from "@kreate/protocol/json";
+import { Cid } from "@kreate/protocol/types";
+import { assert } from "@kreate/protocol/utils";
 
 import { Connections } from "../../connections";
 import { $setup } from "../../framework/base";
@@ -138,7 +138,7 @@ export function aiPodcastIndexer(
           checkExceptions(
             await waitUntilObjectExists(
               { client: s3, maxWaitTime: 60 },
-              { Bucket: "teiki-ai", Key: s3Key }
+              { Bucket: s3Bucket, Key: s3Key }
             )
           );
           console.log(`[ai.podcast] OK: ${cid}.wav`);
@@ -193,7 +193,7 @@ function splitToWords(text: string) {
 function normalizeSummary(
   summary: string,
   wordsLimit: number,
-  outro = "For more information, please read the full announcement on Teiki."
+  outro = "For more information, please read the full announcement on Kreate."
 ) {
   let remaining = wordsLimit;
   const lines: string[] = [];

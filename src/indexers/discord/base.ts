@@ -9,7 +9,7 @@ export type DiscordAlertContext = {
   channelId: string;
   shinkaRoleId: string;
   cexplorerUrl: string;
-  teikiHost: string;
+  kreateOrigin: string;
   discordIgnoredNotificationsBefore?: Date;
 };
 
@@ -20,7 +20,7 @@ export function createDiscordAlertContext(
     channelId,
     shinkaRoleId: config.discord().DISCORD_SHINKA_ROLE_ID,
     cexplorerUrl: config.cardano().CEXPLORER_URL,
-    teikiHost: config.teiki().TEIKI_HOST,
+    kreateOrigin: config.kreate().KREATE_ORIGIN,
     discordIgnoredNotificationsBefore:
       config.discord().DISCORD_IGNORE_NOTIFICATIONS_BEFORE,
   };

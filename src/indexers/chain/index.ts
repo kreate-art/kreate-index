@@ -8,7 +8,7 @@ import {
 import * as Staking from "../../framework/chain/staking";
 
 import * as backing from "./backing";
-import { TeikiChainIndexContext } from "./context";
+import { KreateChainIndexContext } from "./context";
 import * as deployed_scripts from "./deployed-scripts";
 import * as migration from "./migration";
 import * as project from "./project";
@@ -16,7 +16,7 @@ import * as protocol_params from "./protocol-params";
 import * as teiki_plant from "./teiki-plant";
 import * as treasury from "./treasury";
 
-type TeikiChainIndexEvent =
+type KreateChainIndexEvent =
   | project.Event
   | backing.Event
   | treasury.Event
@@ -25,7 +25,10 @@ type TeikiChainIndexEvent =
   | migration.Event
   | teiki_plant.Event;
 
-const creator = ChainIndexer.new<TeikiChainIndexContext, TeikiChainIndexEvent>;
+const creator = ChainIndexer.new<
+  KreateChainIndexContext,
+  KreateChainIndexEvent
+>;
 
 getChainIndexer.setup = $setup(async (resources) => {
   await setupGenesis(resources);
@@ -41,7 +44,7 @@ const setups: Setup[] = [
   teiki_plant.setup,
 ];
 
-const $ = $handlers<TeikiChainIndexContext>();
+const $ = $handlers<KreateChainIndexContext>();
 
 export async function getChainIndexer(connections: BaseChainIndexConnections) {
   const staking = Staking.createStakingIndexer({

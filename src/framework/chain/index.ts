@@ -5,8 +5,8 @@ import * as O from "@cardano-ogmios/schema";
 import fastq from "fastq";
 import * as L from "lucid-cardano";
 
-import { Hex, TimeDifference, UnixTime } from "@teiki/protocol/types";
-import { assert } from "@teiki/protocol/utils";
+import { Hex, TimeDifference, UnixTime } from "@kreate/protocol/types";
+import { assert } from "@kreate/protocol/utils";
 
 import { BLOCK_INGESTION_CONFIG } from "../../config";
 import { Connections } from "../../connections";

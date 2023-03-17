@@ -7,11 +7,11 @@ import {
   PROTOCOL_NFT_TOKEN_NAMES,
   TEIKI_PLANT_NFT_TOKEN_NAME,
   TEIKI_TOKEN_NAME,
-} from "@teiki/protocol/contracts/common/constants";
+} from "@kreate/protocol/contracts/common/constants";
 
 import { StakingIndexer } from "../../framework/chain/staking";
 
-type TeikiChainIndexYamlConfig = {
+type KreateChainIndexYamlConfig = {
   bootstrap: O.PointOrOrigin[];
   deployment: ScriptHash[];
   scripts: {
@@ -26,9 +26,9 @@ type TeikiChainIndexYamlConfig = {
   };
 };
 
-export type TeikiChainIndexConfig = ReturnType<typeof loadConfig>;
+export type KreateChainIndexConfig = ReturnType<typeof loadConfig>;
 
-export function loadConfig(rawConfig: TeikiChainIndexYamlConfig) {
+export function loadConfig(rawConfig: KreateChainIndexYamlConfig) {
   const { deployment, scripts, ...config } = rawConfig;
   return {
     ...config,
@@ -63,11 +63,11 @@ export function loadConfig(rawConfig: TeikiChainIndexYamlConfig) {
   };
 }
 
-export type TeikiChainIndexContext = {
+export type KreateChainIndexContext = {
   readonly staking: StakingIndexer;
   // Customize this, generally it consists of both immutable (e.g, config)
   // and mutable (e.g, caching) state for effiency.
-  readonly config: Readonly<TeikiChainIndexConfig>;
+  readonly config: Readonly<KreateChainIndexConfig>;
   protocolVersion: number;
   scriptHashes: {
     dedicatedTreasury: Set<ScriptHash>;
