@@ -10,6 +10,7 @@ import * as Staking from "../../framework/chain/staking";
 import * as backing from "./backing";
 import { KreateChainIndexContext } from "./context";
 import * as deployed_scripts from "./deployed-scripts";
+import * as kolours from "./kolours";
 import * as migration from "./migration";
 import * as project from "./project";
 import * as protocol_params from "./protocol-params";
@@ -42,6 +43,7 @@ const setups: Setup[] = [
   treasury.setup,
   protocol_params.setup,
   teiki_plant.setup,
+  kolours.setup,
 ];
 
 const $ = $handlers<KreateChainIndexContext>();
