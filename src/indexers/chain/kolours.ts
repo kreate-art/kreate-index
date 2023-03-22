@@ -37,12 +37,12 @@ export const setup = $.setup(async ({ sql }) => {
     )
   `;
   await sql`
-    CREATE UNIQUE INDEX IF NOT EXISTS kolour_book_kolour_tx_index
-      ON kolours.kolour_book(kolour, tx_id)
+    CREATE UNIQUE INDEX IF NOT EXISTS kolour_book_unique_kolour_index
+      ON kolours.kolour_book(status) WHERE status <> 'expired'
   `;
   await sql`
-    CREATE INDEX IF NOT EXISTS kolour_book_status_index
-      ON kolours.kolour_book(status)
+    CREATE UNIQUE INDEX IF NOT EXISTS kolour_book_tx_kolour_index
+      ON kolours.kolour_book(tx_id, kolour)
   `;
   await sql`
     CREATE TABLE IF NOT EXISTS kolours.kolour_mint (
