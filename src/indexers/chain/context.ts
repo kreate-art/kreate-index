@@ -23,6 +23,7 @@ type KreateChainIndexYamlConfig = {
     vDedicatedTreasury: ScriptHash[];
     vSharedTreasury: ScriptHash[];
     vOpenTreasury: ScriptHash[];
+    kolours: { nftKolour: ScriptHash; nftGenesisKreation: ScriptHash };
   };
 };
 
@@ -60,6 +61,8 @@ export function loadConfig(rawConfig: KreateChainIndexYamlConfig) {
       shared: scripts.vSharedTreasury,
       open: scripts.vOpenTreasury,
     },
+    kolourNftMph: scripts.kolours.nftKolour,
+    genesisKreactionNftMph: scripts.kolours.nftGenesisKreation,
   };
 }
 

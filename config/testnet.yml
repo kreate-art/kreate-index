@@ -22,3 +22,6 @@ scripts:
     - ef0eca97c65f8ae120b604604bc013744be2d7beb4aaf44e906539e5
   vOpenTreasury:
     - 24e3992ab2ec573c4a5b90b6143e49e107ff95743c96fe61fb694d33
+  kolours:
+    nftKolour: af944467efea6ec76d7e18964d280f585ee89bb3102b1e1c2bda710b
+    nftGenesisKreation: 0bc5eea78cb0baad9bff9b73d3dd28defd8f0c24ab6d586279f6526b
