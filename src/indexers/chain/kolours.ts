@@ -1,4 +1,6 @@
+import { unsafeMetadatumAsJSON } from "@cardano-ogmios/client";
 import { Slot } from "@cardano-ogmios/schema";
+import * as L from "lucid-cardano";
 
 import { KOLOURS_CONFIRMATION_SLOTS } from "../../config";
 import { Sql } from "../../db";
@@ -6,7 +8,7 @@ import { $handlers } from "../../framework/chain";
 
 import { KreateChainIndexContext } from "./context";
 
-export type Event = { type: "" };
+export type Event = { type: "kolour_nft" } | { type: "genesis_kreation_nft" };
 const $ = $handlers<KreateChainIndexContext, Event>();
 
 export const KolourStatuses = [
@@ -205,3 +207,98 @@ async function confirmGenesisKreationBook(sql: Sql, confirmSlot: Slot) {
       AND gb.tx_exp_slot <= ${confirmSlot}
   `;
 }
+export const filter = $.filter(
+  ({
+    tx,
+    context: {
+      config: { kolourNftMph, genesisKreactionNftMph },
+    },
+  }) => {
+    const minted = tx.body.mint.assets;
+    if (minted) {
+      for (const [asset, _] of Object.entries(minted)) {
+        const [mph, _] = asset.split(".");
+        if (mph === kolourNftMph) return [{ type: "kolour_nft" }];
+        if (mph === genesisKreactionNftMph)
+          return [{ type: "genesis_kreation_nft" }];
+      }
+    } else {
+      return null;
+    }
+    return null;
+  }
+);
+
+export const kolourNftevent = $.event(
+  async ({
+    connections: { sql },
+    block: { slot },
+    tx,
+    context: {
+      config: { kolourNftMph },
+    },
+  }) => {
+    const txId = tx.id;
+    const minted = tx.body.mint.assets;
+    if (!minted) return;
+
+    const metadatum = tx.metadata?.body?.blob?.["721"];
+    if (!metadatum) return;
+    const metadata = unsafeMetadatumAsJSON(metadatum);
+
+    const kolourMinted = [];
+    for (const [asset, amount] of Object.entries(minted)) {
+      if (amount < 0) continue;
+      const [mph, tokenName] = asset.split(".");
+      if (mph === kolourNftMph) {
+        kolourMinted.push({
+          kolour: L.toText(tokenName).split("#")[1],
+          slot,
+          txId,
+          metadata: metadata[tokenName],
+        });
+      }
+    }
+
+    if (kolourMinted.length)
+      await sql`INSERT INTO kolours.kolour_mint ${sql(kolourMinted)}`;
+  }
+);
+
+export const genesisKreationNftevent = $.event(
+  async ({
+    connections: { sql },
+    block: { slot },
+    tx,
+    context: {
+      config: { genesisKreactionNftMph },
+    },
+  }) => {
+    const txId = tx.id;
+    const minted = tx.body.mint.assets;
+    if (!minted) return;
+
+    const metadatum = tx.metadata?.body?.blob?.["721"];
+    if (!metadatum) return;
+    const metadata = unsafeMetadatumAsJSON(metadatum);
+
+    const genesisKreationMinted = [];
+    for (const [asset, amount] of Object.entries(minted)) {
+      if (amount < 0) continue;
+      const [mph, tokenName] = asset.split(".");
+      if (mph === genesisKreactionNftMph) {
+        genesisKreationMinted.push({
+          kreation: L.toText(tokenName),
+          slot,
+          txId,
+          metadata: metadata[tokenName],
+        });
+      }
+    }
+
+    if (genesisKreationMinted.length)
+      await sql`INSERT INTO kolours.genesis_kreation_mint ${sql(
+        genesisKreationMinted
+      )}`;
+  }
+);
