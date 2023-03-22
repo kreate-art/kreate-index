@@ -24,7 +24,8 @@ type KreateChainIndexEvent =
   | protocol_params.Event
   | deployed_scripts.Event
   | migration.Event
-  | teiki_plant.Event;
+  | teiki_plant.Event
+  | kolours.Event;
 
 const creator = ChainIndexer.new<
   KreateChainIndexContext,
@@ -67,6 +68,7 @@ export async function getChainIndexer(connections: BaseChainIndexConnections) {
         deployed_scripts.filter,
         migration.filter,
         teiki_plant.filter,
+        kolours.filter,
       ],
       events: {
         project: [project.projectEvent],
@@ -81,6 +83,8 @@ export async function getChainIndexer(connections: BaseChainIndexConnections) {
         deployed_scripts: [deployed_scripts.event],
         migration: [],
         teiki_plant: [teiki_plant.event],
+        kolour_nft: [kolours.kolourNftevent],
+        genesis_kreation_nft: [kolours.genesisKreationNftevent],
       },
       rollbacks: [
         $.rollback(
