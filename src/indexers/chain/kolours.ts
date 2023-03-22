@@ -22,7 +22,7 @@ export const setup = $.setup(async ({ sql }) => {
     END $$
   `;
   await sql`
-    CREATE TABLE IF NOT EXISTS kolours.book (
+    CREATE TABLE IF NOT EXISTS kolours.kolour_book (
       id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
       kolour varchar(6) NOT NULL,
       status kolours.status NOT NULL,
@@ -37,15 +37,15 @@ export const setup = $.setup(async ({ sql }) => {
     )
   `;
   await sql`
-    CREATE UNIQUE INDEX IF NOT EXISTS book_kolour_tx_index
-      ON kolours.book(kolour, tx_id)
+    CREATE UNIQUE INDEX IF NOT EXISTS kolour_book_kolour_tx_index
+      ON kolours.kolour_book(kolour, tx_id)
   `;
   await sql`
-    CREATE INDEX IF NOT EXISTS book_status_index
-      ON kolours.book(status)
+    CREATE INDEX IF NOT EXISTS kolour_book_status_index
+      ON kolours.kolour_book(status)
   `;
   await sql`
-    CREATE TABLE IF NOT EXISTS kolours.mint (
+    CREATE TABLE IF NOT EXISTS kolours.kolour_mint (
       id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
       kolour varchar(6) UNIQUE,
       slot integer NOT NULL REFERENCES chain.block (slot) ON DELETE CASCADE,
