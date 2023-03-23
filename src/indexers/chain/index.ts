@@ -84,11 +84,19 @@ export async function getChainIndexer(connections: BaseChainIndexConnections) {
       },
       rollbacks: [
         $.rollback(
-          async ({ context: { staking }, connections: { views }, action }) => {
+          async ({
+            context: { staking },
+            connections: { sql, views },
+            action,
+            point,
+          }) => {
             staking.reboot();
             action != "begin" && staking.reload(null);
             views.refresh("views.project_custom_url");
             views.refresh("views.project_summary");
+            action != "end" &&
+              point !== "origin" &&
+              (await kolours.confirm(sql, point.slot));
           }
         ),
       ],
@@ -97,7 +105,14 @@ export async function getChainIndexer(connections: BaseChainIndexConnections) {
         staking.toggleReloadDynamically(true);
         staking.reload(null);
       },
-      afterBlock: Staking.afterBlock,
+      afterBlock: async (params) => {
+        await (params.inSync
+          ? Promise.all([
+              Staking.afterBlock(params),
+              kolours.confirm(params.connections.sql, params.point.slot),
+            ])
+          : Staking.afterBlock(params));
+      },
     },
   });
   return Object.assign(chainIndexer, { staking });

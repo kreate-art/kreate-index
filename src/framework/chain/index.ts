@@ -165,6 +165,7 @@ type ChainIndexAfterBlockHandler<TContext> = (_: {
   connections: ChainIndexConnections;
   context: TContext;
   block: O.BlockBabbage;
+  point: ChainBlock;
   inSync: boolean;
 }) => MaybePromise<void>;
 
@@ -516,7 +517,14 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
                 isBlockStored = true;
               },
             };
-        await afterBlock({ driver, connections, context, block, inSync });
+        await afterBlock({
+          driver,
+          connections,
+          context,
+          block,
+          point: cblock,
+          inSync,
+        });
       }
       if (inSync && time >= this.nextBlockGc) {
         const count = await gcDetachedBlocks(sql);
