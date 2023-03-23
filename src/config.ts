@@ -161,6 +161,10 @@ export const BLOCK_INGESTION_CONFIG = {
   ),
 };
 
+export const KOLOURS_CONFIRMATION_SLOTS = Number(
+  process.env.KOLOURS_CONFIRMATION_SLOTS || 200 // Roughly 10 blocks
+);
+
 function parseChainIndexBegin(
   raw: string | undefined
 ): "origin" | "tip" | O.Point | undefined {

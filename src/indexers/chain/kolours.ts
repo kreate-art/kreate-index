@@ -1,3 +1,7 @@
+import { Slot } from "@cardano-ogmios/schema";
+
+import { KOLOURS_CONFIRMATION_SLOTS } from "../../config";
+import { Sql } from "../../db";
 import { $handlers } from "../../framework/chain";
 
 import { KreateChainIndexContext } from "./context";
@@ -23,13 +27,6 @@ export const setup = $.setup(async ({ sql }) => {
   `;
 
   await sql`
-    CREATE TABLE IF NOT EXISTS kolours.referral (
-      code text PRIMARY KEY,
-      discount numeric(4, 4) NOT NULL
-    )
-  `;
-
-  await sql`
     CREATE TABLE IF NOT EXISTS kolours.kolour_book (
       id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
       kolour varchar(6) NOT NULL,
@@ -46,12 +43,16 @@ export const setup = $.setup(async ({ sql }) => {
     )
   `;
   await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS kolour_book_tx_kolour_index
+      ON kolours.kolour_book(tx_id, kolour)
+  `;
+  await sql`
     CREATE UNIQUE INDEX IF NOT EXISTS kolour_book_unique_kolour_index
       ON kolours.kolour_book(kolour) WHERE status <> 'expired'
   `;
   await sql`
-    CREATE UNIQUE INDEX IF NOT EXISTS kolour_book_tx_kolour_index
-      ON kolours.kolour_book(tx_id, kolour)
+    CREATE INDEX IF NOT EXISTS kolour_book_tx_exp_index
+      ON kolours.kolour_book(tx_exp_slot) WHERE status = 'booked'
   `;
 
   // Follow chain
@@ -63,6 +64,14 @@ export const setup = $.setup(async ({ sql }) => {
       tx_id varchar(64) NOT NULL,
       metadata jsonb NOT NULL
     )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS kolour_mint_slot_index
+      ON kolours.kolour_mint(slot)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS kolour_mint_tx_id_index
+      ON kolours.kolour_mint(tx_id)
   `;
 
   await sql`
@@ -95,12 +104,16 @@ export const setup = $.setup(async ({ sql }) => {
     )
   `;
   await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS genesis_kreation_book_tx_kreation_index
+      ON kolours.genesis_kreation_book(tx_id, kreation)
+  `;
+  await sql`
     CREATE UNIQUE INDEX IF NOT EXISTS genesis_kreation_book_unique_kreation_index
       ON kolours.genesis_kreation_book(kreation) WHERE status <> 'expired'
   `;
   await sql`
-    CREATE UNIQUE INDEX IF NOT EXISTS genesis_kreation_book_tx_kreation_index
-      ON kolours.genesis_kreation_book(tx_id, kreation)
+    CREATE INDEX IF NOT EXISTS genesis_kreation_book_tx_exp_index
+      ON kolours.genesis_kreation_book(tx_exp_slot) WHERE status = 'booked'
   `;
 
   // Follow chain
@@ -113,4 +126,68 @@ export const setup = $.setup(async ({ sql }) => {
       metadata jsonb NOT NULL
     )
   `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS genesis_kreation_mint_slot_index
+      ON kolours.genesis_kreation_mint(slot)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS genesis_kreation_mint_tx_id_index
+      ON kolours.genesis_kreation_mint(tx_id)
+  `;
 });
+
+export async function confirm(sql: Sql, slot: Slot) {
+  const confirmSlot = slot - KOLOURS_CONFIRMATION_SLOTS;
+  await Promise.all([
+    confirmKolourBook(sql, confirmSlot),
+    confirmGenesisKreationBook(sql, confirmSlot),
+  ]);
+}
+
+async function confirmKolourBook(sql: Sql, confirmSlot: Slot) {
+  await sql`
+    UPDATE
+      kolours.kolour_book kb
+    SET
+      status = 'minted'
+    FROM
+      kolours.kolour_mint km
+    WHERE
+      kb.status = 'booked'
+      AND km.tx_id = kb.tx_id
+      AND km.slot <= ${confirmSlot}
+  `;
+  await sql`
+    UPDATE
+      kolours.kolour_book kb
+    SET
+      status = 'expired'
+    WHERE
+      kb.status = 'booked'
+      AND kb.tx_exp_slot <= ${confirmSlot}
+  `;
+}
+
+async function confirmGenesisKreationBook(sql: Sql, confirmSlot: Slot) {
+  await sql`
+    UPDATE
+      kolours.genesis_kreation_book gb
+    SET
+      status = 'minted'
+    FROM
+      kolours.genesis_kreation_mint gm
+    WHERE
+      gb.status = 'booked'
+      AND gm.tx_id = gb.tx_id
+      AND gm.slot <= ${confirmSlot}
+  `;
+  await sql`
+    UPDATE
+      kolours.genesis_kreation_book gb
+    SET
+      status = 'expired'
+    WHERE
+      gb.status = 'booked'
+      AND gb.tx_exp_slot <= ${confirmSlot}
+  `;
+}
