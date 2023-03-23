@@ -80,11 +80,12 @@ export const setup = $.setup(async ({ sql }) => {
     CREATE TABLE IF NOT EXISTS kolours.genesis_kreation_list (
       id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
       kreation text UNIQUE,
-      base_image_cid text NOT NULL,
+      initial_image_cid text NOT NULL,
       final_image_cid text NOT NULL,
       listed_fee bigint NOT NULL,
       palette kolours.genesis_kreation_layer[] NOT NULL,
-      attrs jsonb NOT NULL
+      attrs jsonb NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `;
 
