@@ -23,17 +23,6 @@ export const setup = $.setup(async ({ sql }) => {
   `;
 
   await sql`
-    DO $$ BEGIN
-      IF to_regtype('kolours.genesis_kreation_layer') IS NULL THEN
-        CREATE TYPE kolours.genesis_kreation_layer AS (
-          kolour varchar(6),
-          image_cid text
-        );
-      END IF;
-    END $$
-  `;
-
-  await sql`
     CREATE TABLE IF NOT EXISTS kolours.referral (
       code text PRIMARY KEY,
       discount numeric(4, 4) NOT NULL
@@ -83,7 +72,8 @@ export const setup = $.setup(async ({ sql }) => {
       initial_image_cid text NOT NULL,
       final_image_cid text NOT NULL,
       listed_fee bigint NOT NULL,
-      palette kolours.genesis_kreation_layer[] NOT NULL,
+      -- [{k(olour): kolour, l(ayer): cid}] Because array handling with this lib is dumb
+      palette jsonb NOT NULL,
       attrs jsonb NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
