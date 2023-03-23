@@ -22,8 +22,8 @@
     "typecheck:watch": "tsc --noEmit --strict --watch"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.295.0",
-    "@aws-sdk/lib-storage": "^3.295.0",
+    "@aws-sdk/client-s3": "^3.297.0",
+    "@aws-sdk/lib-storage": "^3.297.0",
     "@cardano-ogmios/client": "^5.6.0",
     "@kreate/protocol": "github:kreate-community/kreate-protocol#b323ad7943c7df66019c5ecf9c5851841279952e",
     "discord.js": "14.8.0",
