@@ -8,7 +8,12 @@ import { $handlers } from "../../framework/chain";
 
 import { KreateChainIndexContext } from "./context";
 
-export type Event = { type: "kolour_nft" } | { type: "genesis_kreation_nft" };
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Meta = any;
+
+export type Event =
+  | { type: "kolour_nft"; names: string[]; meta: Meta }
+  | { type: "genesis_kreation_nft"; names: string[]; meta: Meta };
 const $ = $handlers<KreateChainIndexContext, Event>();
 
 export const KolourStatuses = [
@@ -211,94 +216,73 @@ export const filter = $.filter(
   ({
     tx,
     context: {
-      config: { kolourNftMph, genesisKreactionNftMph },
+      config: { kolourNftPolicyId, genesisKreationNftPolicyId },
     },
   }) => {
     const minted = tx.body.mint.assets;
-    if (minted) {
-      for (const [asset, _] of Object.entries(minted)) {
-        const [mph, _] = asset.split(".");
-        if (mph === kolourNftMph) return [{ type: "kolour_nft" }];
-        if (mph === genesisKreactionNftMph)
-          return [{ type: "genesis_kreation_nft" }];
-      }
-    } else {
-      return null;
+    if (!minted) return null;
+    const kolourNfts: string[] = [];
+    const genesisKreationNfts: string[] = [];
+    for (const [asset, amount] of Object.entries(minted)) {
+      if (amount < 0) continue;
+      const [mph, tn] = asset.split(".");
+      if (mph === kolourNftPolicyId) kolourNfts.push(tn);
+      else if (mph === genesisKreationNftPolicyId) genesisKreationNfts.push(tn);
     }
-    return null;
+    if (kolourNfts.length || genesisKreationNfts.length) {
+      const metadatum = tx.metadata?.body?.blob?.["721"];
+      let meta;
+      if (metadatum) {
+        meta = unsafeMetadatumAsJSON(metadatum);
+      } else {
+        meta = undefined;
+        console.warn("Metadatum 721 should be available for NFTs");
+      }
+      const events: Event[] = [];
+      kolourNfts.length &&
+        events.push({ type: "kolour_nft", names: kolourNfts, meta });
+      genesisKreationNfts.length &&
+        events.push({
+          type: "genesis_kreation_nft",
+          names: genesisKreationNfts,
+          meta,
+        });
+      return events;
+    } else return null;
   }
 );
 
-export const kolourNftevent = $.event(
+export const kolourNftEvent = $.event(
   async ({
     connections: { sql },
     block: { slot },
-    tx,
-    context: {
-      config: { kolourNftMph },
-    },
+    tx: { id },
+    event: { names, meta },
   }) => {
-    const txId = tx.id;
-    const minted = tx.body.mint.assets;
-    if (!minted) return;
-
-    const metadatum = tx.metadata?.body?.blob?.["721"];
-    if (!metadatum) return;
-    const metadata = unsafeMetadatumAsJSON(metadatum);
-
-    const kolourMinted = [];
-    for (const [asset, amount] of Object.entries(minted)) {
-      if (amount < 0) continue;
-      const [mph, tokenName] = asset.split(".");
-      if (mph === kolourNftMph) {
-        kolourMinted.push({
-          kolour: L.toText(tokenName).split("#")[1],
-          slot,
-          txId,
-          metadata: metadata[tokenName],
-        });
-      }
-    }
-
-    if (kolourMinted.length)
-      await sql`INSERT INTO kolours.kolour_mint ${sql(kolourMinted)}`;
+    const mints = names.map((o) => ({
+      kolour: L.toText(o).split("#", 2)[1],
+      slot,
+      txId: id,
+      metadata: meta?.[o] ?? {},
+    }));
+    if (mints.length) await sql`INSERT INTO kolours.kolour_mint ${sql(mints)}`;
   }
 );
 
-export const genesisKreationNftevent = $.event(
+export const genesisKreationNftEvent = $.event(
   async ({
     connections: { sql },
     block: { slot },
-    tx,
-    context: {
-      config: { genesisKreactionNftMph },
-    },
+    tx: { id },
+    event: { names, meta },
   }) => {
-    const txId = tx.id;
-    const minted = tx.body.mint.assets;
-    if (!minted) return;
-
-    const metadatum = tx.metadata?.body?.blob?.["721"];
-    if (!metadatum) return;
-    const metadata = unsafeMetadatumAsJSON(metadatum);
-
-    const genesisKreationMinted = [];
-    for (const [asset, amount] of Object.entries(minted)) {
-      if (amount < 0) continue;
-      const [mph, tokenName] = asset.split(".");
-      if (mph === genesisKreactionNftMph) {
-        genesisKreationMinted.push({
-          kreation: L.toText(tokenName),
-          slot,
-          txId,
-          metadata: metadata[tokenName],
-        });
-      }
-    }
-
-    if (genesisKreationMinted.length)
-      await sql`INSERT INTO kolours.genesis_kreation_mint ${sql(
-        genesisKreationMinted
-      )}`;
+    const mints = names.map((o) => ({
+      kreation: L.toText(o),
+      slot,
+      txId: id,
+      metadata: meta?.[o] ?? {},
+    }));
+    if (mints.length)
+      await sql`INSERT INTO kolours.genesis_kreation_mint ${sql(mints)}`;
   }
 );

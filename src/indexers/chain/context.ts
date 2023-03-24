@@ -61,8 +61,8 @@ export function loadConfig(rawConfig: KreateChainIndexYamlConfig) {
       shared: scripts.vSharedTreasury,
       open: scripts.vOpenTreasury,
     },
-    kolourNftMph: scripts.kolours.nftKolour,
-    genesisKreactionNftMph: scripts.kolours.nftGenesisKreation,
+    kolourNftPolicyId: scripts.kolours.nftKolour,
+    genesisKreationNftPolicyId: scripts.kolours.nftGenesisKreation,
   };
 }
 
