@@ -11,6 +11,7 @@ export type DiscordAlertContext = {
   cexplorerUrl: string;
   kreateOrigin: string;
   discordIgnoredNotificationsBefore?: Date;
+  ipfsGatewayUrl: string;
 };
 
 export function createDiscordAlertContext(
@@ -23,5 +24,6 @@ export function createDiscordAlertContext(
     kreateOrigin: config.kreate().KREATE_ORIGIN,
     discordIgnoredNotificationsBefore:
       config.discord().DISCORD_IGNORE_NOTIFICATIONS_BEFORE,
+    ipfsGatewayUrl: config.ai().IPFS_GATEWAY_URL,
   };
 }
