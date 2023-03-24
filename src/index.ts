@@ -12,6 +12,7 @@ import { getChainIndexer } from "./indexers/chain";
 import { discordBackingAlertIndexer } from "./indexers/discord/backing";
 import { createDiscordAlertContext } from "./indexers/discord/base";
 import { discordDelegationAlertIndexer } from "./indexers/discord/delegation";
+import { discordGenesisKreationNftAlertIndexer } from "./indexers/discord/genesis_kreation_nft";
 import { discordKolourNftAlertIndexer } from "./indexers/discord/kolour-nft";
 import { discordProjectAlertIndexer } from "./indexers/discord/project";
 import { discordProjectModerationAlertIndexer } from "./indexers/discord/project-moderation";
@@ -231,6 +232,14 @@ const AllIndexers = {
     () =>
       createDiscordAlertContext(
         config.discord().DISCORD_KOLOUR_NFT_ALERT_CHANNEL_ID
+      )
+  ),
+  "discord.genesis_kreation_nft": wrapPollingIndexer(
+    discordGenesisKreationNftAlertIndexer,
+    ["sql", "discord", "notifications"],
+    () =>
+      createDiscordAlertContext(
+        config.discord().DISCORD_GENESIS_KREATION_NFT_ALERT_CHANNEL_ID
       )
   ),
 } as const;
