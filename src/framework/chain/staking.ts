@@ -96,8 +96,8 @@ export const setup = $setup(async ({ sql }) => {
   await sql`
     CREATE TABLE IF NOT EXISTS chain.staking_state (
       hash varchar(56) PRIMARY KEY,
-      address TEXT NOT NULL,
-      pool_id TEXT,
+      address text NOT NULL,
+      pool_id text,
       rewards bigint NOT NULL,
       reloaded_slot integer NOT NULL
     )

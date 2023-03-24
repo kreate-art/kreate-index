@@ -27,6 +27,18 @@ export const setup = $.setup(async ({ sql }) => {
   `;
 
   await sql`
+    CREATE TABLE IF NOT EXISTS kolours.referral (
+      id text PRIMARY KEY,
+      pool_id text,
+      discount numeric(4, 4) NOT NULL
+    )
+  `;
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS referral_pool_id
+      ON kolours.referral(pool_id) WHERE pool_id IS NOT NULL
+  `;
+
+  await sql`
     CREATE TABLE IF NOT EXISTS kolours.kolour_book (
       id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
       kolour varchar(6) NOT NULL,
@@ -98,6 +110,8 @@ export const setup = $.setup(async ({ sql }) => {
       tx_exp_time timestamptz NOT NULL,
       fee bigint NOT NULL,
       listed_fee bigint NOT NULL,
+      name text NOT NULL,
+      description text NOT NULL,
       user_address text NOT NULL,
       fee_address text NOT NULL,
       referral text
