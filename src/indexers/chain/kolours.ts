@@ -78,11 +78,15 @@ export const setup = $.setup(async ({ sql }) => {
   await sql`
     CREATE TABLE IF NOT EXISTS kolours.kolour_mint (
       id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-      kolour varchar(6) UNIQUE,
+      kolour varchar(6) NOT NULL,
       slot integer NOT NULL REFERENCES chain.block (slot) ON DELETE CASCADE,
       tx_id varchar(64) NOT NULL,
       metadata jsonb NOT NULL
     )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS kolour_mint_kolour_index
+      ON kolours.kolour_mint(kolour)
   `;
   await sql`
     CREATE INDEX IF NOT EXISTS kolour_mint_slot_index
@@ -146,6 +150,10 @@ export const setup = $.setup(async ({ sql }) => {
       tx_id varchar(64) NOT NULL,
       metadata jsonb NOT NULL
     )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS genesis_kreation_kreation_index
+      ON kolours.genesis_kreation_mint(kreation)
   `;
   await sql`
     CREATE INDEX IF NOT EXISTS genesis_kreation_mint_slot_index
@@ -231,21 +239,25 @@ export const filter = $.filter(
     }
     if (kolourNfts.length || genesisKreationNfts.length) {
       const metadatum = tx.metadata?.body?.blob?.["721"];
-      let meta;
+      let metadatumJson;
       if (metadatum) {
-        meta = unsafeMetadatumAsJSON(metadatum);
+        metadatumJson = unsafeMetadatumAsJSON(metadatum);
       } else {
-        meta = undefined;
+        metadatumJson = undefined;
         console.warn("Metadatum 721 should be available for NFTs");
       }
       const events: Event[] = [];
       kolourNfts.length &&
-        events.push({ type: "kolour_nft", names: kolourNfts, meta });
+        events.push({
+          type: "kolour_nft",
+          names: kolourNfts,
+          meta: metadatumJson?.[kolourNftPolicyId],
+        });
       genesisKreationNfts.length &&
         events.push({
           type: "genesis_kreation_nft",
           names: genesisKreationNfts,
-          meta,
+          meta: metadatumJson?.[genesisKreationNftPolicyId],
         });
       return events;
     } else return null;
@@ -265,12 +277,7 @@ export const kolourNftEvent = $.event(
       txId: id,
       metadata: meta?.[o] ?? {},
     }));
-    // TODO: Remove this bad fix
-    if (mints.length)
-      await sql`
-        INSERT INTO kolours.kolour_mint ${sql(mints)}
-          ON CONFLICT DO NOTHING
-      `;
+    if (mints.length) await sql`INSERT INTO kolours.kolour_mint ${sql(mints)}`;
   }
 );
 
@@ -288,10 +295,6 @@ export const genesisKreationNftEvent = $.event(
       metadata: meta?.[o] ?? {},
     }));
     if (mints.length)
-      // TODO: Remove this bad fix
-      await sql`
-        INSERT INTO kolours.genesis_kreation_mint ${sql(mints)}
-          ON CONFLICT DO NOTHING
-      `;
+      await sql`INSERT INTO kolours.genesis_kreation_mint ${sql(mints)}`;
   }
 );

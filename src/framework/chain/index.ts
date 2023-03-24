@@ -206,6 +206,7 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
 
   private inSync!: boolean;
   private isBootstrapped!: boolean;
+  private startAt!: O.Slot | undefined;
   private endAt!: O.Slot | undefined;
   private endDelay!: TimeDifference;
 
@@ -312,8 +313,8 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
       points = blocks.length ? blocks : begin;
     }
 
-    const startAt = points instanceof Array ? slotFrom(points[0]) : points;
-    console.log(`[Chain] Will start at: ${startAt}`);
+    const start = points instanceof Array ? slotFrom(points[0]) : points;
+    console.log(`[Chain] Will start at: ${start}`);
 
     const csr = await (async () => {
       const chainSync = this.clients.chainSync;
@@ -321,7 +322,7 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
         const { tip } = await ChainSync.findIntersect(chainSync.context, [
           "origin",
         ]);
-        if (typeof startAt === "number" && slotFrom(tip) >= startAt) {
+        if (typeof start === "number" && slotFrom(tip) >= start) {
           await this.reloadSlotTimeInterpreter();
           return chainSync.startSync(points, inFlight, onError);
         } else {
@@ -344,7 +345,10 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
     this.endAt = endAt;
     this.endDelay = end?.delay ?? 0;
 
-    if (endAt && slotFrom(csr.intersection.point) >= endAt) {
+    const startAt = slotFrom(csr.intersection.point);
+    this.startAt = startAt;
+    if (endAt && startAt >= endAt) {
+      this.startAt = undefined;
       console.log(`[Chain] Intersection >= ${endAt}`);
       console.log(`[Chain] Goodbye in ${(this.endDelay / 1000).toFixed(1)}s`);
       endTimeout = setTimeout(prexit.exit0, this.endDelay);
@@ -393,12 +397,14 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
         await sqlDeleteChainBlockAfter(sql, lastBlock.slot);
         if (saveCheckpoint) {
           await sqlInsertChainBlock(sql, lastBlock, true);
-          console.log("^^ Checkpoint saved!");
+          console.log("^^ Checkpoint saved!", lastBlock);
         } else {
           console.warn("^^ Checkpoint ignored!");
         }
       } else {
-        console.warn("^^ No checkpoint :(");
+        const startAt = this.startAt;
+        if (startAt != null) await sqlDeleteChainBlockAfter(sql, startAt);
+        console.warn("^^ No checkpoint :(", startAt);
       }
       console.log("!!! Stopped");
       this.status = "inactive";
