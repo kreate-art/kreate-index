@@ -12,6 +12,7 @@ import { getChainIndexer } from "./indexers/chain";
 import { discordBackingAlertIndexer } from "./indexers/discord/backing";
 import { createDiscordAlertContext } from "./indexers/discord/base";
 import { discordDelegationAlertIndexer } from "./indexers/discord/delegation";
+import { discordKolourNftAlertIndexer } from "./indexers/discord/kolour-nft";
 import { discordProjectAlertIndexer } from "./indexers/discord/project";
 import { discordProjectModerationAlertIndexer } from "./indexers/discord/project-moderation";
 import { discordProjectUpdateAlertIndexer } from "./indexers/discord/project-update";
@@ -222,6 +223,14 @@ const AllIndexers = {
     () =>
       createDiscordAlertContext(
         config.discord().DISCORD_CONTENT_MODERATION_CHANNEL_ID
+      )
+  ),
+  "discord.kolour_nft_alert": wrapPollingIndexer(
+    discordKolourNftAlertIndexer,
+    ["sql", "discord", "notifications"],
+    () =>
+      createDiscordAlertContext(
+        config.discord().DISCORD_KOLOUR_NFT_ALERT_CHANNEL_ID
       )
   ),
 } as const;
