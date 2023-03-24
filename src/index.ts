@@ -12,7 +12,7 @@ import { getChainIndexer } from "./indexers/chain";
 import { discordBackingAlertIndexer } from "./indexers/discord/backing";
 import { createDiscordAlertContext } from "./indexers/discord/base";
 import { discordDelegationAlertIndexer } from "./indexers/discord/delegation";
-import { discordGenesisKreationNftAlertIndexer } from "./indexers/discord/genesis_kreation_nft";
+import { discordGenesisKreationNftAlertIndexer } from "./indexers/discord/genesis-kreation-nft";
 import { discordKolourNftAlertIndexer } from "./indexers/discord/kolour-nft";
 import { discordProjectAlertIndexer } from "./indexers/discord/project";
 import { discordProjectModerationAlertIndexer } from "./indexers/discord/project-moderation";
