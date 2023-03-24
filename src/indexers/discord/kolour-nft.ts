@@ -67,9 +67,9 @@ export function discordKolourNftAlertIndexer(
         FROM
           kolours.kolour_book kb
         INNER JOIN
-          chain.output o ON kb.tx_id = o.tx_id
+          kolours.kolour_mint km ON km.tx_id = kb.tx_id
         INNER JOIN
-          chain.block b ON o.created_slot = b.slot
+          chain.block b ON km.slot = b.slot
         LEFT JOIN (
           SELECT DISTINCT ON (book_id)
             book_id,
@@ -88,7 +88,7 @@ export function discordKolourNftAlertIndexer(
               ? sql`${discordIgnoredNotificationsBefore} <= b.time`
               : sql`TRUE`
           }
-        ORDER BY o.id
+        ORDER BY km.id
         LIMIT ${TASKS_PER_FETCH}
       `;
       return { tasks, continue: tasks.length >= TASKS_PER_FETCH };
