@@ -24,7 +24,7 @@ type Task = {
   imageCid: string;
   messageId: string;
 };
-type KolourNftAlertKey = string; // id|status
+type GenesisKreationNftAlertKey = string; // id|status
 
 const TASKS_PER_FETCH = 20;
 
@@ -48,7 +48,8 @@ export function discordGenesisKreationNftAlertIndexer(
     triggers: { channels: ["discord.genesis_kreation_nft_alert"] },
     concurrency: { workers: 1 },
 
-    $id: ({ bookId, status }: Task): KolourNftAlertKey => `${bookId}|${status}`,
+    $id: ({ bookId, status }: Task): GenesisKreationNftAlertKey =>
+      `${bookId}|${status}`,
 
     fetch: async function () {
       const {
@@ -71,9 +72,9 @@ export function discordGenesisKreationNftAlertIndexer(
         FROM
           kolours.genesis_kreation_book gkb
         INNER JOIN
-          chain.output o ON gkb.tx_id = o.tx_id
+          kolours.genesis_kreation_mint gkm ON gkm.tx_id = gkb.tx_id
         INNER JOIN
-          chain.block b ON o.created_slot = b.slot
+          chain.block b ON gkm.slot = b.slot
         INNER JOIN
           kolours.genesis_kreation_list gkl ON gkl.kreation = gkb.kreation
         LEFT JOIN (
@@ -94,7 +95,7 @@ export function discordGenesisKreationNftAlertIndexer(
               ? sql`${discordIgnoredNotificationsBefore} <= b.time`
               : sql`TRUE`
           }
-        ORDER BY o.id
+        ORDER BY gkb.id
         LIMIT ${TASKS_PER_FETCH}
       `;
       return { tasks, continue: tasks.length >= TASKS_PER_FETCH };
