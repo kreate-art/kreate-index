@@ -16,7 +16,7 @@ type Task = {
   kolour: Hex;
   status: (typeof KolourStatuses)[number];
   txId: Hex;
-  listedFee: Lovelace;
+  fee: Lovelace;
   userAddress: Address;
   time: UnixTime;
   imageCid: string;
@@ -59,7 +59,7 @@ export function discordKolourNftAlertIndexer(
           kb.kolour,
           kb.status,
           kb.tx_id,
-          kb.listed_fee,
+          kb.fee,
           kb.user_address,
           kb.image_cid,
           x.message_id,
@@ -99,7 +99,7 @@ export function discordKolourNftAlertIndexer(
       bookId,
       kolour,
       status,
-      listedFee,
+      fee,
       userAddress,
       imageCid,
       time,
@@ -118,7 +118,7 @@ export function discordKolourNftAlertIndexer(
         .addFields({ name: "Owner", value: `${userAddress}` })
         .addFields({
           name: "Price",
-          value: `${shortenNumber(listedFee, { shift: -6 })} ₳`,
+          value: `${shortenNumber(fee, { shift: -6 })} ₳`,
         })
         .setColor(`#${kolour}`)
         .setImage(`${ipfsGatewayUrl}/ipfs/${imageCid}`)
