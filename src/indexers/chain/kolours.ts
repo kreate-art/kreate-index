@@ -271,12 +271,15 @@ export const kolourNftEvent = $.event(
     tx: { id },
     event: { names, meta },
   }) => {
-    const mints = names.map((o) => ({
-      kolour: L.toText(o).split("#", 2)[1],
-      slot,
-      txId: id,
-      metadata: meta?.[o] ?? {},
-    }));
+    const mints = names.map((token) => {
+      const tokenText = L.toText(token);
+      return {
+        kolour: tokenText.split("#", 2)[1],
+        slot,
+        txId: id,
+        metadata: meta?.[tokenText] ?? {},
+      };
+    });
     if (mints.length) await sql`INSERT INTO kolours.kolour_mint ${sql(mints)}`;
   }
 );
@@ -288,12 +291,15 @@ export const genesisKreationNftEvent = $.event(
     tx: { id },
     event: { names, meta },
   }) => {
-    const mints = names.map((o) => ({
-      kreation: L.toText(o),
-      slot,
-      txId: id,
-      metadata: meta?.[o] ?? {},
-    }));
+    const mints = names.map((token) => {
+      const tokenText = L.toText(token);
+      return {
+        kreation: tokenText,
+        slot,
+        txId: id,
+        metadata: meta?.[tokenText] ?? {},
+      };
+    });
     if (mints.length)
       await sql`INSERT INTO kolours.genesis_kreation_mint ${sql(mints)}`;
   }
