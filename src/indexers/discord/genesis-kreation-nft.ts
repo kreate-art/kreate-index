@@ -16,7 +16,7 @@ type Task = {
   kreation: string;
   status: (typeof KolourStatuses)[number];
   txId: Hex;
-  listedFee: Lovelace;
+  fee: Lovelace;
   userAddress: Address;
   name: string;
   description: string;
@@ -62,7 +62,7 @@ export function discordGenesisKreationNftAlertIndexer(
           gkb.kreation,
           gkb.status,
           gkb.tx_id,
-          gkb.listed_fee,
+          gkb.fee,
           gkb.user_address,
           gkb.name,
           gkb.description,
@@ -106,7 +106,7 @@ export function discordGenesisKreationNftAlertIndexer(
       bookId,
       kreation,
       status,
-      listedFee,
+      fee,
       userAddress,
       imageCid,
       name,
@@ -129,7 +129,7 @@ export function discordGenesisKreationNftAlertIndexer(
         .addFields({ name: "Description", value: `${description}` })
         .addFields({
           name: "Price",
-          value: `${shortenNumber(listedFee, { shift: -6 })} ₳`,
+          value: `${shortenNumber(fee, { shift: -6 })} ₳`,
         })
         .setColor("#ffff00")
         .setImage(`${ipfsGatewayUrl}/ipfs/${imageCid}`)

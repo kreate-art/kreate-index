@@ -89,6 +89,7 @@ export async function getChainIndexer(connections: BaseChainIndexConnections) {
       rollbacks: [
         $.rollback(
           async ({
+            driver,
             context: { staking },
             connections: { sql, views },
             action,
@@ -100,7 +101,7 @@ export async function getChainIndexer(connections: BaseChainIndexConnections) {
             views.refresh("views.project_summary");
             action != "end" &&
               point !== "origin" &&
-              (await kolours.confirm(sql, point.slot));
+              (await kolours.confirm(sql, point.slot, driver));
           }
         ),
       ],
@@ -113,7 +114,11 @@ export async function getChainIndexer(connections: BaseChainIndexConnections) {
         await (params.inSync
           ? Promise.all([
               Staking.afterBlock(params),
-              kolours.confirm(params.connections.sql, params.point.slot),
+              kolours.confirm(
+                params.connections.sql,
+                params.point.slot,
+                params.driver
+              ),
             ])
           : Staking.afterBlock(params));
       },

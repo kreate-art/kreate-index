@@ -4,7 +4,7 @@ import * as L from "lucid-cardano";
 
 import { KOLOURS_CONFIRMATION_SLOTS } from "../../config";
 import { Sql } from "../../db";
-import { $handlers } from "../../framework/chain";
+import { $handlers, ChainIndexCoreDriver } from "../../framework/chain";
 
 import { KreateChainIndexContext } from "./context";
 
@@ -166,12 +166,18 @@ export const setup = $.setup(async ({ sql }) => {
   `;
 });
 
-export async function confirm(sql: Sql, slot: Slot) {
+export async function confirm(
+  sql: Sql,
+  slot: Slot,
+  driver: ChainIndexCoreDriver
+) {
   const confirmSlot = slot - KOLOURS_CONFIRMATION_SLOTS;
   await Promise.all([
     confirmKolourBook(sql, confirmSlot),
     confirmGenesisKreationBook(sql, confirmSlot),
   ]);
+  driver.notify("discord.kolour_nft_alert");
+  driver.notify("discord.genesis_kreation_nft_alert");
 }
 
 async function confirmKolourBook(sql: Sql, confirmSlot: Slot) {
