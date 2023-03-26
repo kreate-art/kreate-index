@@ -8,18 +8,17 @@ import { $handlers } from "../../framework/chain";
 
 import { KreateChainIndexContext } from "./context";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Meta = any;
+type Meta = Record<string, unknown>;
 
 export type Event =
-  | { type: "kolour_nft"; names: string[]; meta: Meta }
-  | { type: "genesis_kreation_nft"; names: string[]; meta: Meta };
+  | { type: "kolour_nft"; names: string[]; meta: Meta | undefined }
+  | { type: "genesis_kreation_nft"; names: string[]; meta: Meta | undefined };
 const $ = $handlers<KreateChainIndexContext, Event>();
 
 export const KolourStatuses = [
   "booked",
-  "minted", // After the mint is indexed + confirmation
-  "expired", // After the tx is expired + confirmation
+  "minted", // After the mint is indexed + confirmations
+  "expired", // After the tx is expired + confirmations
 ] as const;
 
 export const setup = $.setup(async ({ sql }) => {
@@ -58,7 +57,8 @@ export const setup = $.setup(async ({ sql }) => {
       image_cid text NOT NULL,
       user_address text NOT NULL,
       fee_address text NOT NULL,
-      referral text
+      referral text,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `;
   await sql`
@@ -107,7 +107,7 @@ export const setup = $.setup(async ({ sql }) => {
       -- [{k(olour): kolour, l(ayer): cid}] Because array handling with this lib is dumb
       palette jsonb NOT NULL,
       attrs jsonb NOT NULL,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `;
 
@@ -125,7 +125,8 @@ export const setup = $.setup(async ({ sql }) => {
       description text,
       user_address text NOT NULL,
       fee_address text NOT NULL,
-      referral text
+      referral text,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `;
   await sql`
