@@ -75,7 +75,7 @@ export function discordGenesisKreationNftAlertIndexer(
         FROM
           kolours.genesis_kreation_book gkb
         INNER JOIN
-          kolours.genesis_kreation_mint gkm ON gkm.tx_id = gkb.tx_id
+          kolours.genesis_kreation_mint gkm ON gkm.tx_id = gkb.tx_id AND gkm.kreation = gkb.kreation
         INNER JOIN
           chain.block b ON gkm.slot = b.slot
         INNER JOIN

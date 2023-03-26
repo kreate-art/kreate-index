@@ -70,7 +70,7 @@ export function discordKolourNftAlertIndexer(
         FROM
           kolours.kolour_book kb
         INNER JOIN
-          kolours.kolour_mint km ON km.tx_id = kb.tx_id
+          kolours.kolour_mint km ON km.tx_id = kb.tx_id AND km.kolour = kb.kolour
         INNER JOIN
           chain.block b ON km.slot = b.slot
         LEFT JOIN (
