@@ -147,6 +147,7 @@ type ChainIndexEventHandler<TContext, TEvent> = (_: {
 }) => MaybePromise<void>;
 
 type ChainIndexRollbackHandler<TContext> = (_: {
+  driver: ChainIndexCoreDriver;
   connections: ChainIndexConnections;
   context: TContext;
   point: O.PointOrOrigin;
@@ -212,7 +213,7 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
 
   private nextBlockGc!: UnixTime;
   private nextChasingBatchFlush!: UnixTime;
-  private baseDriver!: ChainIndexBaseDriver;
+  private coreDriver!: ChainIndexCoreDriver;
 
   private blockIngestor!: BlockIngestor;
 
@@ -289,7 +290,7 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
     for (const initialize of this.handlers.initializers ?? [])
       await initialize(params);
 
-    this.baseDriver = createBaseDriver({
+    this.coreDriver = createCoreDriver({
       notifications: new Set(),
       refreshes: new Set(),
     });
@@ -385,9 +386,11 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
       await synchronized.drained();
       const lastBlock = blockIngestor.lastBlock;
       if (lastBlock) {
+        const driver = this.coreDriver;
         console.log(`^^ Checkpoint revert...`);
         this.blockIngestor.rollBackward(lastBlock);
         const params = {
+          driver,
           point: lastBlock,
           connections,
           context,
@@ -395,6 +398,7 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
         };
         for (const handler of this.handlers.rollbacks) await handler(params);
         await sqlDeleteChainBlockAfter(sql, lastBlock.slot);
+        await driver.flushImmediately(connections);
         if (saveCheckpoint) {
           await sqlInsertChainBlock(sql, lastBlock, true);
           console.log("^^ Checkpoint saved!", lastBlock);
@@ -432,7 +436,7 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
       handlers: { filters, events, afterBlock },
       blockIngestor,
       endAt,
-      baseDriver,
+      coreDriver,
     } = this;
 
     let interpreter = connections.slotTimeInterpreter;
@@ -481,7 +485,7 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
             isBlockStored = true;
           }
 
-          const driver = createTxDriver(baseDriver, connections, tx, slot);
+          const driver = createTxDriver(coreDriver, connections, tx, slot);
           const paramsWithDriver = { ...params, driver };
 
           await Promise.all(
@@ -514,9 +518,9 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
       }
       if (afterBlock) {
         const driver = isBlockStored
-          ? baseDriver
+          ? coreDriver
           : {
-              ...baseDriver,
+              ...coreDriver,
               storeBlock: async () => {
                 blockIngestor.flush();
                 await sqlInsertChainBlock(sql, cblock);
@@ -539,7 +543,7 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
         this.nextBlockGc = time + CHAIN_BLOCK_GC_INTERVAL;
       }
       if (inSync || time >= this.nextChasingBatchFlush) {
-        baseDriver.flush(connections);
+        coreDriver.flush(connections);
         if (!inSync)
           this.nextChasingBatchFlush = time + CHAIN_CHASING_BATCH_INTERVAL;
       }
@@ -566,25 +570,28 @@ export class ChainIndexer<TContext, TEvent extends IEvent> {
       action = "begin";
       this.isBootstrapped = true;
     }
-    const connections = this.connections;
+    const {
+      connections,
+      context,
+      handlers: { rollbacks },
+      coreDriver: driver,
+      blockIngestor,
+    } = this;
     if (point === "origin") {
       await this.reloadSlotTimeInterpreter();
-      this.blockIngestor.rollBackward("origin", tip);
+      blockIngestor.rollBackward("origin", tip);
     } else {
       const { slot, hash } = point;
       let interpreter = connections.slotTimeInterpreter;
       if (slot < interpreter.ledgerTipSlot)
         interpreter = await this.reloadSlotTimeInterpreter();
       const time = interpreter.slotToAbsoluteTime(slot);
-      this.blockIngestor.rollBackward({ slot, hash, time }, tip);
+      blockIngestor.rollBackward({ slot, hash, time }, tip);
     }
-    const {
-      context,
-      handlers: { rollbacks },
-    } = this;
-    const params = { point, connections, context, action };
+    const params = { driver, point, connections, context, action };
     for (const handler of rollbacks) await handler(params);
     await sqlDeleteChainBlockAfter(connections.sql, slotFrom(point));
+    await driver.flushImmediately(connections);
   }
 
   private async reloadSlotTimeInterpreter(): Promise<SlotTimeInterpreter> {
@@ -620,17 +627,20 @@ export function $handlers<TContext, TEvent extends IEvent = { type: never }>() {
   };
 }
 
-export interface ChainIndexBaseDriver {
+export interface ChainIndexCoreDriver {
   notify(channel: string): void;
   refresh(view: string): void;
-  flush(connections: Connections<"notifications" | "views">): Promise<void>;
+  flush(connections: Connections<"notifications" | "views">): void;
+  flushImmediately(
+    connections: Connections<"notifications" | "views">
+  ): Promise<void>;
 }
 
-export interface ChainIndexBlockDriver extends ChainIndexBaseDriver {
+export interface ChainIndexBlockDriver extends ChainIndexCoreDriver {
   storeBlock?: () => Promise<void>;
 }
 
-export interface ChainIndexTxDriver extends ChainIndexBaseDriver {
+export interface ChainIndexTxDriver extends ChainIndexCoreDriver {
   store<T>(
     indicies: number[],
     each: (output: ChainOutput, index: number) => [string | null, T] | undefined
@@ -642,25 +652,35 @@ export interface ChainIndexTxDriver extends ChainIndexBaseDriver {
   _finally(): Promise<void>;
 }
 
-function createBaseDriver({
+function createCoreDriver({
   notifications,
   refreshes,
 }: {
   notifications: Set<string>;
   refreshes: Set<string>;
-}): ChainIndexBaseDriver {
+}): ChainIndexCoreDriver {
   return {
     notify: notifications.add.bind(notifications),
     refresh: refreshes.add.bind(refreshes),
-    flush: async function (connections) {
+    flush: function (connections) {
       if (notifications.size) {
-        const notify = connections.notifications.notify;
-        for (const c of notifications) notify(c);
+        notifications.forEach(connections.notifications.notify);
         notifications.clear();
       }
       if (refreshes.size) {
-        const refresh = connections.views.refresh;
-        for (const v of refreshes) refresh(v);
+        refreshes.forEach(connections.views.refresh);
+        refreshes.clear();
+      }
+    },
+    flushImmediately: async function (connections) {
+      if (notifications.size) {
+        const notify = connections.notifications.notifyImmediately;
+        await Promise.all(Array.from(notifications).map(notify));
+        notifications.clear();
+      }
+      if (refreshes.size) {
+        const refresh = connections.views.refreshImmediately;
+        await Promise.all(Array.from(refreshes).map(refresh));
         refreshes.clear();
       }
     },
@@ -668,7 +688,7 @@ function createBaseDriver({
 }
 
 function createTxDriver(
-  base: ChainIndexBaseDriver,
+  core: ChainIndexCoreDriver,
   { synchronized, sql, lucid }: ChainIndexConnections,
   tx: O.TxBabbage,
   slot: O.Slot
@@ -767,7 +787,7 @@ function createTxDriver(
   }
 
   return {
-    ...base,
+    ...core,
 
     async store(indicies, each) {
       return doStore(indicies, each, false);
