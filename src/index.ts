@@ -234,7 +234,7 @@ const AllIndexers = {
         config.discord().DISCORD_KOLOUR_NFT_ALERT_CHANNEL_ID
       )
   ),
-  "discord.genesis_kreation_nft": wrapPollingIndexer(
+  "discord.genesis_kreation_nft_alert": wrapPollingIndexer(
     discordGenesisKreationNftAlertIndexer,
     ["sql", "discord", "notifications"],
     () =>
