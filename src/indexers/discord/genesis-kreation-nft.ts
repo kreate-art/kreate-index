@@ -45,7 +45,10 @@ export function discordGenesisKreationNftAlertIndexer(
   return createPollingIndexer({
     name: "discord.genesis_kreation_nft_alert",
     connections,
-    triggers: { channels: ["discord.genesis_kreation_nft_alert"] },
+    triggers: {
+      channels: ["discord.genesis_kreation_nft_alert"],
+      interval: 60_000, // Temporary
+    },
     concurrency: { workers: 1 },
 
     $id: ({ bookId, status }: Task): GenesisKreationNftAlertKey =>
@@ -125,13 +128,13 @@ export function discordGenesisKreationNftAlertIndexer(
       const embed = new EmbedBuilder()
         .setTitle(`${kreation} was ${status}!`)
         .addFields({ name: "Owner", value: `${userAddress}` })
-        .addFields({ name: "Name", value: `${name}` })
-        .addFields({ name: "Description", value: `${description}` })
+        .addFields({ name: "Name", value: `${name || "-"}` })
+        .addFields({ name: "Description", value: `${description || "-"}` })
         .addFields({
           name: "Price",
           value: `${shortenNumber(fee, { shift: -6 })} ₳`,
         })
-        .setColor("#ffff00")
+        .setColor("#222222")
         .setImage(`${ipfsGatewayUrl}/ipfs/${imageCid}`)
         .setTimestamp(time);
 

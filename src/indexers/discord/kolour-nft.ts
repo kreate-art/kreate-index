@@ -43,7 +43,10 @@ export function discordKolourNftAlertIndexer(
   return createPollingIndexer({
     name: "discord.kolour_nft_alert",
     connections,
-    triggers: { channels: ["discord.kolour_nft_alert"] },
+    triggers: {
+      channels: ["discord.kolour_nft_alert"],
+      interval: 60_000, // Temporary
+    },
     concurrency: { workers: 1 },
 
     $id: ({ bookId, status }: Task): KolourNftAlertKey => `${bookId}|${status}`,
