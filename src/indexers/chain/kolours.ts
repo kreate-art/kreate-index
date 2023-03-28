@@ -232,6 +232,7 @@ async function confirmGenesisKreationBook(sql: Sql, confirmSlot: Slot) {
   `;
   return updatedToMinted.count + updatedToExpired.count;
 }
+
 export const filter = $.filter(
   ({
     tx,
@@ -278,6 +279,7 @@ export const filter = $.filter(
 
 export const kolourNftEvent = $.event(
   async ({
+    driver,
     connections: { sql },
     block: { slot },
     tx: { id },
@@ -292,12 +294,18 @@ export const kolourNftEvent = $.event(
         metadata: meta?.[tokenText] ?? {},
       };
     });
-    if (mints.length) await sql`INSERT INTO kolours.kolour_mint ${sql(mints)}`;
+    if (!mints.length) {
+      console.warn("there is no valid kolour mint");
+      return;
+    }
+    await sql`INSERT INTO kolours.kolour_mint ${sql(mints)}`;
+    driver.notify("discord.kolour_nft_alert");
   }
 );
 
 export const genesisKreationNftEvent = $.event(
   async ({
+    driver,
     connections: { sql },
     block: { slot },
     tx: { id },
@@ -312,7 +320,11 @@ export const genesisKreationNftEvent = $.event(
         metadata: meta?.[tokenText] ?? {},
       };
     });
-    if (mints.length)
-      await sql`INSERT INTO kolours.genesis_kreation_mint ${sql(mints)}`;
+    if (!mints.length) {
+      console.warn("there is no valid genesis kreation mint");
+      return;
+    }
+    await sql`INSERT INTO kolours.genesis_kreation_mint ${sql(mints)}`;
+    driver.notify("discord.genesis_kreation_nft_alert");
   }
 );
