@@ -24,6 +24,6 @@ export function createDiscordAlertContext(
     kreateOrigin: config.kreate().KREATE_ORIGIN,
     discordIgnoredNotificationsBefore:
       config.discord().DISCORD_IGNORE_NOTIFICATIONS_BEFORE,
-    ipfsGatewayUrl: config.ai().IPFS_GATEWAY_URL,
+    ipfsGatewayUrl: config.ipfs().IPFS_GATEWAY_URL,
   };
 }

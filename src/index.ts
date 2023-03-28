@@ -161,20 +161,18 @@ const AllIndexers = {
     }
   ),
   "ai.ocr": wrapPollingIndexer(aiOcrIndexer, ["sql", "notifications"], () => {
-    const cc = config.ai();
     return {
-      aiServerUrl: cc.AI_SERVER_URL,
-      ipfsGatewayUrl: cc.IPFS_GATEWAY_URL,
+      aiServerUrl: config.ai().AI_SERVER_URL,
+      ipfsGatewayUrl: config.ipfs().IPFS_GATEWAY_URL,
     };
   }),
   "ai.project_moderation": wrapPollingIndexer(
     aiProjectModerationIndexer,
     ["sql", "notifications"],
     () => {
-      const cc = config.ai();
       return {
-        aiServerUrl: cc.AI_SERVER_URL,
-        ipfsGatewayUrl: cc.IPFS_GATEWAY_URL,
+        aiServerUrl: config.ai().AI_SERVER_URL,
+        ipfsGatewayUrl: config.ipfs().IPFS_GATEWAY_URL,
       };
     }
   ),
