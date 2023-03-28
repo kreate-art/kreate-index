@@ -172,16 +172,18 @@ export async function confirm(
   driver: ChainIndexCoreDriver
 ) {
   const confirmSlot = slot - KOLOURS_CONFIRMATION_SLOTS;
-  await Promise.all([
+  const [kolourUpdatedCount, genesisKreationUpdatedCount] = await Promise.all([
     confirmKolourBook(sql, confirmSlot),
     confirmGenesisKreationBook(sql, confirmSlot),
   ]);
-  driver.notify("discord.kolour_nft_alert");
-  driver.notify("discord.genesis_kreation_nft_alert");
+  if (kolourUpdatedCount) driver.notify("discord.kolour_nft_alert");
+  if (genesisKreationUpdatedCount)
+    driver.notify("discord.genesis_kreation_nft_alert");
 }
 
+// Returns the number of updated rows
 async function confirmKolourBook(sql: Sql, confirmSlot: Slot) {
-  await sql`
+  const updatedToMinted = await sql`
     UPDATE
       kolours.kolour_book kb
     SET
@@ -193,7 +195,7 @@ async function confirmKolourBook(sql: Sql, confirmSlot: Slot) {
       AND km.tx_id = kb.tx_id
       AND km.slot <= ${confirmSlot}
   `;
-  await sql`
+  const updatedToExpired = await sql`
     UPDATE
       kolours.kolour_book kb
     SET
@@ -202,10 +204,12 @@ async function confirmKolourBook(sql: Sql, confirmSlot: Slot) {
       kb.status = 'booked'
       AND kb.tx_exp_slot <= ${confirmSlot}
   `;
+  return updatedToMinted.count + updatedToExpired.count;
 }
 
+// Returns the number of updated rows
 async function confirmGenesisKreationBook(sql: Sql, confirmSlot: Slot) {
-  await sql`
+  const updatedToMinted = await sql`
     UPDATE
       kolours.genesis_kreation_book gb
     SET
@@ -217,7 +221,7 @@ async function confirmGenesisKreationBook(sql: Sql, confirmSlot: Slot) {
       AND gm.tx_id = gb.tx_id
       AND gm.slot <= ${confirmSlot}
   `;
-  await sql`
+  const updatedToExpired = await sql`
     UPDATE
       kolours.genesis_kreation_book gb
     SET
@@ -226,6 +230,7 @@ async function confirmGenesisKreationBook(sql: Sql, confirmSlot: Slot) {
       gb.status = 'booked'
       AND gb.tx_exp_slot <= ${confirmSlot}
   `;
+  return updatedToMinted.count + updatedToExpired.count;
 }
 export const filter = $.filter(
   ({
