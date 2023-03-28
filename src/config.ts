@@ -75,6 +75,7 @@ export const ipfs = cached(() => {
   return {
     IPFS_SERVER_URL: requiredEnv("IPFS_SERVER_URL"),
     IPFS_SERVER_TIMEOUT: Number(process.env.IPFS_SERVER_TIMEOUT || 30_000),
+    IPFS_GATEWAY_URL: requiredEnv("IPFS_GATEWAY_URL"),
   };
 });
 
@@ -148,7 +149,6 @@ export const ai = cached(() => {
   return {
     AI_SERVER_URL: requiredEnv("AI_SERVER_URL"),
     AI_S3_BUCKET: requiredEnv("AI_S3_BUCKET"),
-    IPFS_GATEWAY_URL: requiredEnv("IPFS_GATEWAY_URL"),
   };
 });
 
