@@ -102,6 +102,13 @@ export const setup = $.setup(async ({ sql }) => {
   `;
 
   await sql`
+    CREATE TABLE IF NOT EXISTS kolours.kolour_free_mint (
+      address text PRIMARY KEY,
+      quota integer NOT NULL
+    )
+  `;
+
+  await sql`
     CREATE TABLE IF NOT EXISTS kolours.genesis_kreation_list (
       id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
       kreation text UNIQUE,
