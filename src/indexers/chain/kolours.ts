@@ -70,6 +70,10 @@ export const setup = $.setup(async ({ sql }) => {
       ON kolours.kolour_book(kolour) WHERE status <> 'expired'
   `;
   await sql`
+    CREATE INDEX IF NOT EXISTS kolour_book_user_address_index
+      ON kolours.kolour_book(user_address) WHERE status <> 'expired'
+  `;
+  await sql`
     CREATE INDEX IF NOT EXISTS kolour_book_tx_exp_index
       ON kolours.kolour_book(tx_exp_slot) WHERE status = 'booked'
   `;
@@ -104,11 +108,24 @@ export const setup = $.setup(async ({ sql }) => {
       initial_image_cid text NOT NULL,
       final_image_cid text NOT NULL,
       listed_fee bigint NOT NULL,
-      -- [{k(olour): kolour, l(ayer): cid}] Because array handling with this lib is dumb
-      palette jsonb NOT NULL,
+      base_discount numeric(4, 4) NOT NULL,
       attrs jsonb NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS kolours.genesis_kreation_palette (
+      id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      kreation_id bigint NOT NULL REFERENCES kolours.genesis_kreation_list (id) ON DELETE CASCADE,
+      kolour varchar(6) NOT NULL,
+      layer_image_cid text NOT NULL,
+      UNIQUE (kreation_id, kolour)
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS genesis_kreation_palette_kolour_index
+      ON kolours.genesis_kreation_palette(kolour)
   `;
 
   await sql`
@@ -136,6 +153,10 @@ export const setup = $.setup(async ({ sql }) => {
   await sql`
     CREATE UNIQUE INDEX IF NOT EXISTS genesis_kreation_book_unique_kreation_index
       ON kolours.genesis_kreation_book(kreation) WHERE status <> 'expired'
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS genesis_kreation_book_user_address_index
+      ON kolours.genesis_kreation_book(user_address) WHERE status <> 'expired'
   `;
   await sql`
     CREATE INDEX IF NOT EXISTS genesis_kreation_book_tx_exp_index
