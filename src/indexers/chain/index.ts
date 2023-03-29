@@ -83,8 +83,12 @@ export async function getChainIndexer(connections: BaseChainIndexConnections) {
         deployed_scripts: [deployed_scripts.event],
         migration: [],
         teiki_plant: [teiki_plant.event],
-        kolour_nft: [kolours.kolourNftEvent],
-        genesis_kreation_nft: [kolours.genesisKreationNftEvent],
+        kolour_nft$mint: [kolours.kolourNftEvent$Mint],
+        kolour_nft$transfer: [kolours.kolourNftEvent$Transfer],
+        genesis_kreation_nft$mint: [kolours.genesisKreationNftEvent$Mint],
+        genesis_kreation_nft$transfer: [
+          kolours.genesisKreationNftEvent$Transfer,
+        ],
       },
       rollbacks: [
         $.rollback(
