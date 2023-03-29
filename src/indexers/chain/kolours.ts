@@ -71,7 +71,7 @@ export const setup = $.setup(async ({ sql }) => {
   `;
   await sql`
     CREATE INDEX IF NOT EXISTS kolour_book_user_address_index
-      ON kolours.kolour_book(user_address) WHERE status <> 'expired'
+      ON kolours.kolour_book(user_address)
   `;
   await sql`
     CREATE INDEX IF NOT EXISTS kolour_book_tx_exp_index
@@ -156,7 +156,7 @@ export const setup = $.setup(async ({ sql }) => {
   `;
   await sql`
     CREATE INDEX IF NOT EXISTS genesis_kreation_book_user_address_index
-      ON kolours.genesis_kreation_book(user_address) WHERE status <> 'expired'
+      ON kolours.genesis_kreation_book(user_address)
   `;
   await sql`
     CREATE INDEX IF NOT EXISTS genesis_kreation_book_tx_exp_index
