@@ -21,12 +21,24 @@ export const KolourStatuses = [
   "expired", // After the tx is expired + confirmations
 ] as const;
 
+export const KolourSources = ["present", "free", "genesis_kreation"] as const;
+
 export const setup = $.setup(async ({ sql }) => {
   await sql`
     DO $$ BEGIN
       IF to_regtype('kolours.status') IS NULL THEN
         CREATE TYPE kolours.status AS ENUM (${sql.unsafe(
           KolourStatuses.map((a) => `'${a}'`).join(", ")
+        )});
+      END IF;
+    END $$
+  `;
+
+  await sql`
+    DO $$ BEGIN
+      IF to_regtype('kolours.kolour_source') IS NULL THEN
+        CREATE TYPE kolours.kolour_source AS ENUM (${sql.unsafe(
+          KolourSources.map((a) => `'${a}'`).join(", ")
         )});
       END IF;
     END $$
@@ -49,6 +61,8 @@ export const setup = $.setup(async ({ sql }) => {
       id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
       kolour varchar(6) NOT NULL,
       status kolours.status NOT NULL,
+      source kolours.kolour_source NOT NULL,
+      source_id text,
       tx_id varchar(64) NOT NULL,
       tx_exp_slot integer NOT NULL,
       tx_exp_time timestamptz NOT NULL,
@@ -74,8 +88,8 @@ export const setup = $.setup(async ({ sql }) => {
       ON kolours.kolour_book(user_address)
   `;
   await sql`
-    CREATE INDEX IF NOT EXISTS kolour_book_referral_index
-      ON kolours.kolour_book(referral) WHERE referral IS NOT NULL
+    CREATE INDEX IF NOT EXISTS kolour_book_source_index
+      ON kolours.kolour_book(source)
   `;
   await sql`
     CREATE INDEX IF NOT EXISTS kolour_book_tx_exp_index
@@ -168,10 +182,6 @@ export const setup = $.setup(async ({ sql }) => {
   await sql`
     CREATE INDEX IF NOT EXISTS genesis_kreation_book_user_address_index
       ON kolours.genesis_kreation_book(user_address)
-  `;
-  await sql`
-    CREATE INDEX IF NOT EXISTS genesis_kreation_referral_index
-      ON kolours.genesis_kreation_book(referral) WHERE referral IS NOT NULL
   `;
   await sql`
     CREATE INDEX IF NOT EXISTS genesis_kreation_book_tx_exp_index
