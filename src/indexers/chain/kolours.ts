@@ -74,6 +74,10 @@ export const setup = $.setup(async ({ sql }) => {
       ON kolours.kolour_book(user_address)
   `;
   await sql`
+    CREATE INDEX IF NOT EXISTS kolour_book_referral_index
+      ON kolours.kolour_book(referral) WHERE referral IS NOT NULL
+  `;
+  await sql`
     CREATE INDEX IF NOT EXISTS kolour_book_tx_exp_index
       ON kolours.kolour_book(tx_exp_slot) WHERE status = 'booked'
   `;
@@ -164,6 +168,10 @@ export const setup = $.setup(async ({ sql }) => {
   await sql`
     CREATE INDEX IF NOT EXISTS genesis_kreation_book_user_address_index
       ON kolours.genesis_kreation_book(user_address)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS genesis_kreation_referral_index
+      ON kolours.genesis_kreation_book(referral) WHERE referral IS NOT NULL
   `;
   await sql`
     CREATE INDEX IF NOT EXISTS genesis_kreation_book_tx_exp_index
