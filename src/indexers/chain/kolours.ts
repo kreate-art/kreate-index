@@ -1,7 +1,6 @@
 import { unsafeMetadatumAsJSON } from "@cardano-ogmios/client";
 import { Slot } from "@cardano-ogmios/schema";
 import * as L from "lucid-cardano";
-import { Address } from "lucid-cardano";
 
 import { KOLOURS_CONFIRMATION_SLOTS } from "../../config";
 import { Sql } from "../../db";
@@ -9,20 +8,19 @@ import { $handlers, ChainIndexCoreDriver } from "../../framework/chain";
 
 import { KreateChainIndexContext } from "./context";
 
-type Meta = Record<string, unknown>;
-
-// I cannot think of another name. . .
-type NftOwner = { name: string; owner: Address };
+type TokenName = string;
+type Meta = Record<TokenName, unknown>;
+type NftTransfer = { id: string; address: L.Address };
 
 export type Event =
-  | { type: "kolour_nft$mint"; names: string[]; meta: Meta | undefined }
-  | { type: "kolour_nft$transfer"; items: NftOwner[] }
+  | { type: "kolour$mint"; names: TokenName[]; meta: Meta | undefined }
+  | { type: "kolour$transfer"; transfers: NftTransfer[] }
   | {
-      type: "genesis_kreation_nft$mint";
-      names: string[];
+      type: "genesis_kreation$mint";
+      names: TokenName[];
       meta: Meta | undefined;
     }
-  | { type: "genesis_kreation_nft$transfer"; items: NftOwner[] };
+  | { type: "genesis_kreation$transfer"; transfers: NftTransfer[] };
 const $ = $handlers<KreateChainIndexContext, Event>();
 
 export const KolourStatuses = [
@@ -222,7 +220,7 @@ export const setup = $.setup(async ({ sql }) => {
   `;
 
   await sql`
-    CREATE TABLE IF NOT EXISTS kolours.kolour_tracing (
+    CREATE TABLE IF NOT EXISTS kolours.kolour_trace (
       id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
       kolour varchar(6) NOT NULL,
       address text NOT NULL,
@@ -231,12 +229,16 @@ export const setup = $.setup(async ({ sql }) => {
     )
   `;
   await sql`
-    CREATE INDEX IF NOT EXISTS kolour_tracing_kolour_index
-      ON kolours.kolour_tracing(kolour)
+    CREATE INDEX IF NOT EXISTS kolour_trace_kolour_index
+      ON kolours.kolour_trace(kolour)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS kolour_trace_slot_index
+      ON kolours.kolour_trace(slot)
   `;
 
   await sql`
-    CREATE TABLE IF NOT EXISTS kolours.genesis_kreation_tracing (
+    CREATE TABLE IF NOT EXISTS kolours.genesis_kreation_trace (
       id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
       kreation text NOT NULL,
       address text NOT NULL,
@@ -245,8 +247,12 @@ export const setup = $.setup(async ({ sql }) => {
     )
   `;
   await sql`
-    CREATE INDEX IF NOT EXISTS genesis_kreation_tracing_kreation_index
-      ON kolours.genesis_kreation_tracing(kreation)
+    CREATE INDEX IF NOT EXISTS genesis_kreation_trace_kreation_index
+      ON kolours.genesis_kreation_trace(kreation)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS genesis_kreation_trace_slot_index
+      ON kolours.genesis_kreation_trace(slot)
   `;
 });
 
@@ -328,14 +334,14 @@ export const filter = $.filter(
 
     const minted = tx.body.mint.assets;
     if (minted) {
-      const kolourNfts: string[] = [];
-      const genesisKreationNfts: string[] = [];
+      const kolourNfts: TokenName[] = [];
+      const genesisKreationNfts: TokenName[] = [];
       for (const [asset, amount] of Object.entries(minted)) {
-        if (amount < 0) continue;
+        if (amount <= 0) continue;
         const [mph, tn] = asset.split(".");
-        if (mph === kolourNftPolicyId) kolourNfts.push(tn);
+        if (mph === kolourNftPolicyId) kolourNfts.push(L.toText(tn));
         else if (mph === genesisKreationNftPolicyId)
-          genesisKreationNfts.push(tn);
+          genesisKreationNfts.push(L.toText(tn));
       }
 
       if (kolourNfts.length || genesisKreationNfts.length) {
@@ -349,57 +355,52 @@ export const filter = $.filter(
         }
         kolourNfts.length &&
           events.push({
-            type: "kolour_nft$mint",
+            type: "kolour$mint",
             names: kolourNfts,
             meta: metadatumJson?.[kolourNftPolicyId],
           });
         genesisKreationNfts.length &&
           events.push({
-            type: "genesis_kreation_nft$mint",
+            type: "genesis_kreation$mint",
             names: genesisKreationNfts,
             meta: metadatumJson?.[genesisKreationNftPolicyId],
           });
       }
     }
 
-    const produced = tx.body.outputs;
-    const kolourNftsItems: NftOwner[] = [];
-    const genesisKreationNftItems: NftOwner[] = [];
-    for (const [_index, output] of produced.entries()) {
+    const kolourTransfers: NftTransfer[] = [];
+    const genesisKreationTransfers: NftTransfer[] = [];
+    for (const output of tx.body.outputs) {
       const assets = output.value.assets;
       if (assets == null) continue;
-      Object.entries(assets).forEach(([asset, _amount]) => {
+      const address = output.address;
+      for (const asset of Object.keys(assets)) {
         const [mph, tn] = asset.split(".");
         if (mph === kolourNftPolicyId) {
-          kolourNftsItems.push({
-            name: L.toText(tn).split("#")[1],
-            owner: output.address,
-          });
+          const id = L.toText(tn).split("#", 2)[1];
+          kolourTransfers.push({ id, address });
+        } else if (mph === genesisKreationNftPolicyId) {
+          const id = L.toText(tn);
+          genesisKreationTransfers.push({ id, address });
         }
-        if (mph === genesisKreationNftPolicyId) {
-          genesisKreationNftItems.push({
-            name: L.toText(tn),
-            owner: output.address,
-          });
-        }
-      });
+      }
     }
-    kolourNftsItems.length &&
+    kolourTransfers.length &&
       events.push({
-        type: "kolour_nft$transfer",
-        items: kolourNftsItems,
+        type: "kolour$transfer",
+        transfers: kolourTransfers,
       });
-    genesisKreationNftItems.length &&
+    genesisKreationTransfers.length &&
       events.push({
-        type: "genesis_kreation_nft$transfer",
-        items: genesisKreationNftItems,
+        type: "genesis_kreation$transfer",
+        transfers: genesisKreationTransfers,
       });
 
     return events;
   }
 );
 
-export const kolourNftEvent$Mint = $.event<"kolour_nft$mint">(
+export const kolourEvent$Mint = $.event<"kolour$mint">(
   async ({
     driver,
     connections: { sql },
@@ -408,91 +409,70 @@ export const kolourNftEvent$Mint = $.event<"kolour_nft$mint">(
     event: { names, meta },
   }) => {
     const mints = names.map((token) => {
-      const tokenText = L.toText(token);
       return {
-        kolour: tokenText.split("#", 2)[1],
+        kolour: token.split("#", 2)[1],
         slot,
         txId: id,
-        metadata: meta?.[tokenText] ?? {},
+        metadata: meta?.[token] ?? {},
       };
     });
-    if (!mints.length) {
-      console.warn("there is no valid kolour mint");
-      return;
-    }
     await sql`INSERT INTO kolours.kolour_mint ${sql(mints)}`;
     driver.notify("discord.kolour_nft_alert");
   }
 );
 
-export const genesisKreationNftEvent$Mint =
-  $.event<"genesis_kreation_nft$mint">(
-    async ({
-      driver,
-      connections: { sql },
-      block: { slot },
-      tx: { id },
-      event: { names, meta },
-    }) => {
-      const mints = names.map((token) => {
-        const tokenText = L.toText(token);
-        return {
-          kreation: tokenText,
-          slot,
-          txId: id,
-          metadata: meta?.[tokenText] ?? {},
-        };
-      });
-      if (!mints.length) {
-        console.warn("there is no valid genesis kreation mint");
-        return;
-      }
-      await sql`INSERT INTO kolours.genesis_kreation_mint ${sql(mints)}`;
-      driver.notify("discord.genesis_kreation_nft_alert");
-    }
-  );
+export const genesisKreationEvent$Mint = $.event<"genesis_kreation$mint">(
+  async ({
+    driver,
+    connections: { sql },
+    block: { slot },
+    tx: { id },
+    event: { names, meta },
+  }) => {
+    const mints = names.map((token) => {
+      return {
+        kreation: token,
+        slot,
+        txId: id,
+        metadata: meta?.[token] ?? {},
+      };
+    });
+    await sql`INSERT INTO kolours.genesis_kreation_mint ${sql(mints)}`;
+    driver.notify("discord.genesis_kreation_nft_alert");
+  }
+);
 
-export const kolourNftEvent$Transfer = $.event<"kolour_nft$transfer">(
+export const kolourEvent$Transfer = $.event<"kolour$transfer">(
   async ({
     connections: { sql },
     block: { slot },
     tx: { id },
-    event: { items },
+    event: { transfers },
   }) => {
-    const kolours = items.map((item) => ({
-      kolour: item.name,
-      address: item.owner,
-      slot: slot,
+    const records = transfers.map((item) => ({
+      kolour: item.id,
+      address: item.address,
+      slot,
       txId: id,
     }));
-
-    if (!kolours.length) {
-      console.warn("there is no valid kolours transfer");
-      return;
-    }
-    await sql`INSERT INTO kolours.kolour_tracing ${sql(kolours)}`;
+    await sql`INSERT INTO kolours.kolour_trace ${sql(records)}`;
   }
 );
 
-export const genesisKreationNftEvent$Transfer =
-  $.event<"genesis_kreation_nft$transfer">(
+export const genesisKreationEvent$Transfer =
+  $.event<"genesis_kreation$transfer">(
     async ({
       connections: { sql },
       block: { slot },
       tx: { id },
-      event: { items },
+      event: { transfers },
     }) => {
-      const kreations = items.map((item) => ({
-        kreation: item.name,
-        address: item.owner,
-        slot: slot,
+      const records = transfers.map((item) => ({
+        kreation: item.id,
+        address: item.address,
+        slot,
         txId: id,
       }));
-
-      if (!kreations.length) {
-        console.warn("there is no valid genesis kreations transfer");
-        return;
-      }
-      await sql`INSERT INTO kolours.genesis_kreation_tracing ${sql(kreations)}`;
+      await sql`INSERT INTO kolours.genesis_kreation_trace ${sql(records)}`;
     }
   );
