@@ -164,7 +164,7 @@ export const setup = $.setup(async ({ sql }) => {
       fee bigint NOT NULL,
       listed_fee bigint NOT NULL,
       name text NOT NULL,
-      description text NOT NULL,
+      description text[] NOT NULL,
       user_address text NOT NULL,
       fee_address text NOT NULL,
       referral text,
