@@ -138,6 +138,7 @@ export const setup = $.setup(async ({ sql }) => {
     CREATE TABLE IF NOT EXISTS kolours.genesis_kreation_list (
       id integer PRIMARY KEY,
       kreation text UNIQUE,
+      slug text UNIQUE,
       initial_image_cid text NOT NULL,
       final_image_cid text NOT NULL,
       listed_fee bigint NOT NULL,
