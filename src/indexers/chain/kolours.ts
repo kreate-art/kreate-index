@@ -154,6 +154,7 @@ export const setup = $.setup(async ({ sql }) => {
         ON DELETE CASCADE ON UPDATE CASCADE,
       kolour varchar(6) NOT NULL,
       layer_image_cid text NOT NULL,
+      mask_image_cid text,
       UNIQUE (kreation_id, kolour)
     )
   `;
