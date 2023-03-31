@@ -136,7 +136,7 @@ export const setup = $.setup(async ({ sql }) => {
 
   await sql`
     CREATE TABLE IF NOT EXISTS kolours.genesis_kreation_list (
-      id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      id integer PRIMARY KEY,
       kreation text UNIQUE,
       initial_image_cid text NOT NULL,
       final_image_cid text NOT NULL,
@@ -149,8 +149,9 @@ export const setup = $.setup(async ({ sql }) => {
 
   await sql`
     CREATE TABLE IF NOT EXISTS kolours.genesis_kreation_palette (
-      id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-      kreation_id bigint NOT NULL REFERENCES kolours.genesis_kreation_list (id) ON DELETE CASCADE,
+      id integer PRIMARY KEY,
+      kreation_id integer NOT NULL REFERENCES kolours.genesis_kreation_list (id)
+        ON DELETE CASCADE ON UPDATE CASCADE,
       kolour varchar(6) NOT NULL,
       layer_image_cid text NOT NULL,
       UNIQUE (kreation_id, kolour)
