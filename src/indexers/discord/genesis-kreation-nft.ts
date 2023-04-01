@@ -19,7 +19,7 @@ type Task = {
   fee: Lovelace;
   userAddress: Address;
   name: string;
-  description: string;
+  description: string[];
   time: UnixTime;
   imageCid: string;
   messageId: string;
@@ -129,7 +129,10 @@ export function discordGenesisKreationNftAlertIndexer(
         .setTitle(`${kreation} was ${status}!`)
         .addFields({ name: "Owner", value: `${userAddress}` })
         .addFields({ name: "Name", value: `${name || "-"}` })
-        .addFields({ name: "Description", value: `${description || "-"}` })
+        .addFields({
+          name: "Description",
+          value: `${description.join("") || "-"}`,
+        })
         .addFields({
           name: "Price",
           value: `${shortenNumber(fee, { shift: -6 })} ₳`,
