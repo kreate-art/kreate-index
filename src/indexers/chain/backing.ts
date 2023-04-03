@@ -151,7 +151,7 @@ export const event = $.event(
     const txTimeStart = slotTimeInterpreter.slotToAbsoluteTime(
       tx.body.validityInterval.invalidBefore ?? slot
     );
-    const message = extractCip20Message(tx)?.join("\n") || null;
+    const message = handleExtractMessage(extractCip20Message(tx)) || null;
 
     const unbackRows = await sql<
       { projectId: Hex; amount: Lovelace; address: Address }[]
@@ -260,4 +260,10 @@ function extractCip20Message(tx: O.TxBabbage): string[] | null {
         return result;
       }
   return null;
+}
+
+function handleExtractMessage(message: string[] | null) {
+  if (!message) return null;
+  const firstElement = message[0].slice(-1);
+  return /(\s|\n)$/.test(firstElement) ? message.join("") : message.join("\n"); // Two versions of lines splitting
 }
