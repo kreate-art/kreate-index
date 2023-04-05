@@ -230,9 +230,8 @@ async function fetchFromIpfs(
 ): Promise<string> {
   const path = `/ipfs/${cid}`;
   console.log(`Fetching ${path}`);
-  // Check whether given CID exist
   const chunks: Uint8Array[] = [];
-  const response = ipfs.cat(path);
+  const response = ipfs.cat(path, { timeout: 60_000 });
   for await (const chunk of response) chunks.push(chunk);
   return Buffer.concat(chunks).toString("utf8");
 }

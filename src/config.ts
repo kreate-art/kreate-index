@@ -74,7 +74,6 @@ export const redis = cached(() => {
 export const ipfs = cached(() => {
   return {
     IPFS_SERVER_URL: requiredEnv("IPFS_SERVER_URL"),
-    IPFS_SERVER_TIMEOUT: Number(process.env.IPFS_SERVER_TIMEOUT || 30_000),
     IPFS_GATEWAY_URL: requiredEnv("IPFS_GATEWAY_URL"),
   };
 });

@@ -3,7 +3,7 @@ import * as discord from "discord.js";
 import { GatewayIntentBits as DiscordGatewayIntentBits } from "discord.js";
 import * as redis from "ioredis";
 import * as IpfsHttpClient from "ipfs-http-client";
-import { HTTPError as IpfsHttpError } from "ipfs-utils/src/http/error";
+import { HTTPError as IpfsHttpError } from "ipfs-utils/src/http/error.js";
 import { Lucid, Network as LucidNetwork } from "lucid-cardano";
 
 import { assert } from "@kreate/protocol/utils";
@@ -169,21 +169,15 @@ declare module "ioredis" {
 register("ipfs", {
   connect: () => {
     const cc = config.ipfs();
-    return Object.assign(
-      IpfsHttpClient.create({
-        url: cc.IPFS_SERVER_URL,
-        timeout: cc.IPFS_SERVER_TIMEOUT,
-      }),
-      {
-        isOfflineError: function (error: unknown): boolean {
-          return (
-            error instanceof IpfsHttpError &&
-            error.name === "HTTPError" &&
-            error.message.includes("block was not found locally (offline)")
-          );
-        },
-      }
-    );
+    return Object.assign(IpfsHttpClient.create({ url: cc.IPFS_SERVER_URL }), {
+      isOfflineError: function (error: unknown): boolean {
+        return (
+          error instanceof IpfsHttpError &&
+          error.name === "HTTPError" &&
+          error.message.includes("block was not found locally (offline)")
+        );
+      },
+    });
   },
 });
 
