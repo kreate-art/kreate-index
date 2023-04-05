@@ -2,7 +2,7 @@ version: "3"
 # TODO: Currently this file only includes a setup for Kreate Testnet (preview)
 services:
   ogmios-with-node:
-    image: cardanosolutions/cardano-node-ogmios:v5.5.8_1.35.4-preview
+    image: cardanosolutions/cardano-node-ogmios:v5.6.0_1.35.4-preview
     platform: linux/amd64
     volumes:
       - node-db:/db
@@ -15,7 +15,7 @@ services:
     restart: on-failure
 
   ipfs:
-    image: ipfs/kubo:v0.18.0
+    image: ipfs/kubo:v0.19.0
     volumes:
       - ipfs-data:/data/ipfs
     ports:
@@ -26,7 +26,7 @@ services:
     restart: on-failure
 
   postgres:
-    image: postgres:15.1-alpine3.17
+    image: postgres:15.2-alpine3.17
     environment:
       POSTGRES_PASSWORD: kreate
       POSTGRES_DB: kreate
