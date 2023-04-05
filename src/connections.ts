@@ -1,7 +1,9 @@
 import { S3Client } from "@aws-sdk/client-s3";
 import * as discord from "discord.js";
-import { GatewayIntentBits } from "discord.js";
-import * as IpfsClient from "ipfs-http-client";
+import { GatewayIntentBits as DiscordGatewayIntentBits } from "discord.js";
+import * as redis from "ioredis";
+import * as IpfsHttpClient from "ipfs-http-client";
+import { HTTPError as IpfsHttpError } from "ipfs-utils/src/http/error";
 import { Lucid, Network as LucidNetwork } from "lucid-cardano";
 
 import { assert } from "@kreate/protocol/utils";
@@ -13,6 +15,8 @@ import { createViewsController, ViewsController } from "./db/views";
 import { createOgmiosContextFactory, OgmiosContextFactory } from "./ogmios";
 import { MaybePromise } from "./types/typelevel";
 
+import type { IPFS } from "ipfs-core-types";
+
 const DISCORD_NOTIFICATION_DEBOUNCE = 5000; // 5s
 const DISCORD_NOTIFICATION_OPTIONS_ENTRY = {
   debounce: DISCORD_NOTIFICATION_DEBOUNCE,
@@ -20,8 +24,9 @@ const DISCORD_NOTIFICATION_OPTIONS_ENTRY = {
 
 export type AllConnections = {
   readonly sql: db.Sql;
+  readonly redis: redis.Redis;
+  readonly ipfs: Ipfs;
   readonly ogmios: OgmiosContextFactory;
-  readonly ipfs: IpfsClient.IPFSHTTPClient;
   readonly lucid: Lucid;
   readonly discord: discord.Client<boolean>;
   readonly s3: S3Client;
@@ -124,19 +129,72 @@ register("sql", {
   disconnect: (self) => self.end({ timeout: 10 }),
 });
 
-register("ogmios", {
-  connect: () => createOgmiosContextFactory(config.ogmios()),
-  disconnect: (self) => self.shutdown(),
+register("redis", {
+  connect: () => {
+    const cc = config.redis();
+    return new redis.Redis(cc.REDIS_URL, {
+      username: cc.REDIS_USERNAME,
+      password: cc.REDIS_PASSWORD,
+      connectionName: "index",
+      enableAutoPipelining: true,
+      scripts: {
+        delif: {
+          lua: `
+            if redis.call("get", KEYS[1]) == ARGV[1] then
+              return redis.call("del", KEYS[1])
+            else
+              return 0
+            end
+          `,
+          numberOfKeys: 1,
+          readOnly: false,
+        },
+      },
+    });
+  },
+  disconnect: async (self) => {
+    await self.quit();
+  },
 });
+
+declare module "ioredis" {
+  interface RedisCommander<Context> {
+    delif(
+      key: redis.RedisKey,
+      value: redis.RedisValue
+    ): redis.Result<number, Context>;
+  }
+}
 
 register("ipfs", {
   connect: () => {
     const cc = config.ipfs();
-    return IpfsClient.create({
-      url: cc.IPFS_SERVER_URL,
-      timeout: cc.IPFS_SERVER_TIMEOUT,
-    });
+    return Object.assign(
+      IpfsHttpClient.create({
+        url: cc.IPFS_SERVER_URL,
+        timeout: cc.IPFS_SERVER_TIMEOUT,
+      }),
+      {
+        isOfflineError: function (error: unknown): boolean {
+          return (
+            error instanceof IpfsHttpError &&
+            error.name === "HTTPError" &&
+            error.message.includes("block was not found locally (offline)")
+          );
+        },
+      }
+    );
   },
+});
+
+interface Ipfs
+  extends IPFS<IpfsHttpClient.HTTPClientExtraOptions & { offline?: boolean }> {
+  isOfflineError: (error: unknown) => boolean;
+}
+
+register("ogmios", {
+  connect: () => createOgmiosContextFactory(config.ogmios()),
+  disconnect: (self) => self.shutdown(),
 });
 
 register("lucid", {
@@ -152,7 +210,7 @@ register("lucid", {
 register("discord", {
   connect: async () => {
     const client = new discord.Client({
-      intents: [GatewayIntentBits.DirectMessages],
+      intents: [DiscordGatewayIntentBits.DirectMessages],
       partials: [discord.Partials.Channel],
     });
     const { DISCORD_BOT_TOKEN } = config.discord();
@@ -160,7 +218,6 @@ register("discord", {
       console.log(`<discord> Logged in as ${c.user.tag}!`)
     );
     await client.login(DISCORD_BOT_TOKEN);
-
     return client;
   },
   disconnect: (self) => self.destroy(),

@@ -63,11 +63,11 @@ export const database = cached(() => {
   };
 });
 
-export const ogmios = cached((): ConnectionConfig => {
+export const redis = cached(() => {
   return {
-    host: requiredEnv("OGMIOS_HOST"),
-    port: parseInt(requiredEnv("OGMIOS_PORT")),
-    // TODO: Add OGMIOS_TLS, or better, parse from a single env
+    REDIS_URL: requiredEnv("REDIS_URL"),
+    REDIS_USERNAME: process.env.REDIS_USERNAME || undefined,
+    REDIS_PASSWORD: process.env.REDIS_PASSWORD || undefined,
   };
 });
 
@@ -76,6 +76,14 @@ export const ipfs = cached(() => {
     IPFS_SERVER_URL: requiredEnv("IPFS_SERVER_URL"),
     IPFS_SERVER_TIMEOUT: Number(process.env.IPFS_SERVER_TIMEOUT || 30_000),
     IPFS_GATEWAY_URL: requiredEnv("IPFS_GATEWAY_URL"),
+  };
+});
+
+export const ogmios = cached((): ConnectionConfig => {
+  return {
+    host: requiredEnv("OGMIOS_HOST"),
+    port: parseInt(requiredEnv("OGMIOS_PORT")),
+    // TODO: Add OGMIOS_TLS, or better, parse from a single env
   };
 });
 
