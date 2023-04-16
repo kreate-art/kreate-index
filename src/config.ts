@@ -152,13 +152,6 @@ export const aws = cached(() => {
   };
 });
 
-export const ai = cached(() => {
-  return {
-    AI_SERVER_URL: requiredEnv("AI_SERVER_URL"),
-    AI_S3_BUCKET: requiredEnv("AI_S3_BUCKET"),
-  };
-});
-
 export const BLOCK_INGESTION_CONFIG = {
   CHAIN_CHASING_BATCH_INTERVAL: Number(
     process.env.CHAIN_CHASING_BATCH_INTERVAL || 86_400_000 // 1 day
