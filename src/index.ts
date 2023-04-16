@@ -4,10 +4,6 @@ import * as config from "./config";
 import * as connections from "./connections";
 import { Indexer, Setup } from "./framework/base";
 import { PollingIndexer } from "./framework/polling";
-import { aiLogoIndexer } from "./indexers/ai/logo";
-import { aiOcrIndexer } from "./indexers/ai/ocr";
-import { aiPodcastIndexer } from "./indexers/ai/podcast";
-import { aiProjectModerationIndexer } from "./indexers/ai/project-moderation";
 import { getChainIndexer } from "./indexers/chain";
 import { discordBackingAlertIndexer } from "./indexers/discord/backing";
 import { createDiscordAlertContext } from "./indexers/discord/base";
@@ -140,42 +136,6 @@ const AllIndexers = {
     ["sql", "ipfs", "notifications"],
     () => null
   ),
-  "ai.logo": wrapPollingIndexer(
-    aiLogoIndexer,
-    ["sql", "ipfs", "s3", "notifications"],
-    () => {
-      const cc = config.ai();
-      return { s3Bucket: cc.AI_S3_BUCKET, fetched: new Set<string>() };
-    }
-  ),
-  "ai.podcast": wrapPollingIndexer(
-    aiPodcastIndexer,
-    ["sql", "s3", "notifications"],
-    () => {
-      return {
-        aiServerUrl: config.ai().AI_SERVER_URL,
-        s3Bucket: config.aws().ASSETS_S3_BUCKET,
-        s3Prefix: "podcasts/",
-        summaryWordsLimit: config.cardano().NETWORK === "mainnet" ? 1_500 : 100,
-      };
-    }
-  ),
-  "ai.ocr": wrapPollingIndexer(aiOcrIndexer, ["sql", "notifications"], () => {
-    return {
-      aiServerUrl: config.ai().AI_SERVER_URL,
-      ipfsGatewayUrl: config.ipfs().IPFS_GATEWAY_URL,
-    };
-  }),
-  "ai.project_moderation": wrapPollingIndexer(
-    aiProjectModerationIndexer,
-    ["sql", "notifications"],
-    () => {
-      return {
-        aiServerUrl: config.ai().AI_SERVER_URL,
-        ipfsGatewayUrl: config.ipfs().IPFS_GATEWAY_URL,
-      };
-    }
-  ),
   "discord.project_alert": wrapPollingIndexer(
     discordProjectAlertIndexer,
     ["sql", "discord", "notifications"],
@@ -245,9 +205,7 @@ const AllIndexers = {
 const AllIndexerKeys = objectKeys(AllIndexers);
 
 const DisabledIndexers: Partial<Record<config.Env, string[]>> = {
-  development: AllIndexerKeys.filter(
-    (k) => k.startsWith("ai.") || k.startsWith("discord.")
-  ),
+  development: AllIndexerKeys.filter((k) => k.startsWith("discord.")),
 };
 const disabled = DisabledIndexers[config.ENV] ?? [];
 
